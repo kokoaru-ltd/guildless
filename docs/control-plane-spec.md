@@ -589,6 +589,62 @@ The owner inbox contains only:
 
 Every request must include the decision deadline, recommended option, alternatives, evidence, cost of delay, default safe action, and whether it blocks the critical path. Notification volume and owner minutes are tracked as system defects.
 
+### 20.1 Voice directive layer
+
+Voice is the primary capture interface for owner intent, but a transcript is not
+an executable mission. The voice layer is an intent compiler with an explicit
+commit boundary.
+
+```text
+Microphone
+  -> local voice activity detection
+  -> streaming draft transcript
+  -> finalized transcript + immutable audio artifact
+  -> intent segmentation
+  -> facts / assumptions / goals / constraints / decisions / open questions
+  -> contradiction and high-value entity check
+  -> mission preview spoken and displayed back to the owner
+  -> explicit owner commit
+  -> MissionCreated event
+```
+
+Required properties:
+
+- the owner may ramble, revise, interrupt, or say “forget that”; the compiler
+  preserves chronology and emits the final intended state;
+- partial transcripts are never executable and may be revised visually as
+  recognition improves;
+- the original audio, final transcript, transcription engine/version, language,
+  timestamps, and content digest remain attached to the decision provenance;
+- dates, amounts, percentages, names, environments, publishing targets, and
+  destructive verbs are extracted as high-value entities and read back;
+- ambiguous references such as “that”, “next week”, or “make it cheaper” are
+  resolved against a visible candidate or turned into one focused question;
+- the compiler distinguishes an idea, a hypothesis, a preference, a hard
+  constraint, and an authorization;
+- speaking an idea does not grant production, payment, publication, credential,
+  or deletion authority;
+- voice identity may improve convenience but cannot be the only authorization
+  factor for irreversible actions;
+- every committed interpretation is editable and reversible before work begins;
+- language switching and Japanese/English product vocabulary are evaluated with
+  real owner speech, background noise, numbers, and proper nouns.
+
+Recommended transcription routing:
+
+1. Run voice activity detection and a streaming recognizer on device when
+   available, preserving privacy and keeping first feedback immediate.
+2. Use a higher-accuracy local or hosted second pass after the utterance closes.
+3. Compare high-value entities between passes. A disagreement blocks automatic
+   commit and highlights only the uncertain fields.
+4. Use the control plane's model router for intent compilation; do not couple
+   mission semantics to the transcription provider.
+5. Retain a text input and transcript editor as equal-authority fallbacks.
+
+The interaction target is not a conversational assistant that keeps talking.
+It is a quiet chief of staff: listen, structure, expose consequential ambiguity,
+read back the intended company action, and then execute after one clear commit.
+
 ## 21. Storage and services
 
 Bootstrap deployment may be a modular monolith, but boundaries are explicit:
