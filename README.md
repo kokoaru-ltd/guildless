@@ -194,7 +194,10 @@ The hypothesis is not validated if:
 
 ### Phase 1 — Verified software loop
 
-- [ ] Compile one mission into a dependency graph
+- [x] Compile one mission into a dependency graph
+- [x] Enforce cross-provider testing, review, and repair
+- [x] Fail closed when an independent provider is unavailable
+- [x] Block release without deterministic evidence and rollback plan
 - [ ] Run multiple coding agents in isolated git worktrees
 - [ ] Execute tests and independent review
 - [ ] Merge only passing changes
@@ -233,6 +236,16 @@ Implemented contracts live in:
 - [`core/model-registry.ts`](core/model-registry.ts)
 - [`core/production-contract.ts`](core/production-contract.ts)
 - [`docs/architecture.md`](docs/architecture.md)
+- [`orchestrator/planner.mjs`](orchestrator/planner.mjs)
+- [`orchestrator/policy.mjs`](orchestrator/policy.mjs)
+
+Generate the first cross-model production plan:
+
+```bash
+npm run guildless -- plan examples/missions/first-vertical-slice.json
+```
+
+The generated plan is rejected unless implementation, test authoring, review, and repair are separated across providers. Local builds and tests act as deterministic verifiers; model agreement alone can never release a product.
 
 ## Run locally
 
