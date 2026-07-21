@@ -9,218 +9,252 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 
-type Agent = {
-  mark: string;
-  name: string;
-  provider: string;
-  task: string;
-  status: 'working' | 'waiting' | 'reviewing';
-  color: string;
-};
+type Brief = { goal: string; deadline: string; budget: string };
 
-const agents: Agent[] = [
-  { mark: 'C', name: 'Builder', provider: 'Claude', task: '戦闘システムを実装', status: 'working', color: '#E29B67' },
-  { mark: 'O', name: 'Reviewer', provider: 'Codex', task: '差分とテストを検査', status: 'reviewing', color: '#59A8FF' },
-  { mark: 'K', name: 'Operator', provider: 'Kimi', task: 'ログと障害を監視', status: 'working', color: '#8D7CFF' },
-  { mark: 'G', name: 'Media', provider: 'Gemini', task: 'プレイ動画を解析', status: 'waiting', color: '#51C991' },
+const suggestedGoals = [
+  'Ship an iOS game',
+  'Launch a SaaS',
+  'Build a marketplace',
 ];
 
-const stages = [
-  ['仕様', '完了', true],
-  ['非公開テスト', '完了', true],
-  ['実装', '18 / 31', true],
-  ['相互レビュー', '進行中', true],
-  ['実機ビルド', '待機', false],
+const crew = [
+  ['ARCHITECT', 'Codex', 'Scope, system design, acceptance tests', '#A9C7FF'],
+  ['BUILDER', 'Claude', 'Production implementation', '#E9A879'],
+  ['VERIFIER', 'Gemini', 'Independent review and visual QA', '#82D9B1'],
+  ['OPERATOR', 'Kimi', 'Monitoring, triage, maintenance', '#B6A4FF'],
 ];
 
 export default function App() {
-  const [approved, setApproved] = useState(false);
-  const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
+  const [goal, setGoal] = useState('');
+  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [brief, setBrief] = useState<Brief>({ goal: '', deadline: '30 days', budget: '$500' });
 
+  const next = async () => {
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (step === 1 && goal.trim()) {
+      setBrief((current) => ({ ...current, goal: goal.trim() }));
+      setStep(2);
+    } else if (step === 2) {
+      setStep(3);
+    }
+  };
+
+  if (step === 3) return <CommandCenter brief={brief} onReset={() => setStep(1)} />;
+
+  return (
+    <View style={styles.root}>
+      <StatusBar style="light" />
+      <LinearGradient colors={['#111419', '#090A0D']} style={StyleSheet.absoluteFill} />
+      <View style={styles.glow} />
+      <SafeAreaView style={styles.safe}>
+        <View style={styles.nav}>
+          <Text style={styles.wordmark}>GUILDLESS</Text>
+          <Text style={styles.stepLabel}>0{step} / 02</Text>
+        </View>
+
+        <View style={styles.onboarding}>
+          <View style={styles.eyebrowRow}>
+            <View style={styles.signal} />
+            <Text style={styles.eyebrow}>{step === 1 ? 'YOUR FIRST MISSION' : 'OPERATING LIMITS'}</Text>
+          </View>
+
+          {step === 1 ? (
+            <>
+              <Text style={styles.hero}>What should your{`\n`}company ship?</Text>
+              <Text style={styles.heroBody}>
+                Give us the outcome. Your AI company will plan the work, assign specialists, verify every handoff, and ask only when judgment matters.
+              </Text>
+              <View style={styles.inputShell}>
+                <TextInput
+                  autoFocus
+                  accessibilityLabel="Mission outcome"
+                  multiline
+                  placeholder="e.g. Ship a multiplayer roguelite on Steam"
+                  placeholderTextColor="#666B74"
+                  selectionColor="#D8FF62"
+                  value={goal}
+                  onChangeText={setGoal}
+                  style={styles.input}
+                />
+                <Text style={styles.inputHint}>OUTCOME, NOT TASKS</Text>
+              </View>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+                {suggestedGoals.map((item) => (
+                  <Pressable key={item} onPress={() => setGoal(item)} style={({ pressed }) => [styles.chip, pressed && styles.pressed]}>
+                    <Text style={styles.chipText}>{item}</Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </>
+          ) : (
+            <>
+              <Text style={styles.hero}>Set the boundaries.{`\n`}We handle the work.</Text>
+              <Text style={styles.heroBody}>These are guardrails, not a project plan. You can change them while the mission is running.</Text>
+              <View style={styles.summaryCard}>
+                <Text style={styles.summaryLabel}>MISSION</Text>
+                <Text style={styles.summaryValue}>{brief.goal}</Text>
+              </View>
+              <Choice label="TARGET" value={brief.deadline} options={['14 days', '30 days', '90 days']} onChange={(deadline) => setBrief({ ...brief, deadline })} />
+              <Choice label="MAX SPEND" value={brief.budget} options={['$100', '$500', '$2,000']} onChange={(budget) => setBrief({ ...brief, budget })} />
+              <View style={styles.guardrail}>
+                <Text style={styles.guardrailMark}>✓</Text>
+                <Text style={styles.guardrailText}>Purchases, publishing, and destructive actions always require your approval.</Text>
+              </View>
+            </>
+          )}
+        </View>
+
+        <View style={styles.footer}>
+          <Text style={styles.footerNote}>{step === 1 ? 'No setup. No org chart.' : 'You remain the final authority.'}</Text>
+          <Pressable disabled={step === 1 && !goal.trim()} onPress={next} style={({ pressed }) => [styles.continueButton, step === 1 && !goal.trim() && styles.buttonDisabled, pressed && styles.pressed]}>
+            <Text style={styles.continueText}>{step === 1 ? 'Continue' : 'Launch company'}</Text>
+            <Text style={styles.arrow}>→</Text>
+          </Pressable>
+        </View>
+      </SafeAreaView>
+    </View>
+  );
+}
+
+function Choice({ label, value, options, onChange }: { label: string; value: string; options: string[]; onChange: (value: string) => void }) {
+  return (
+    <View style={styles.choiceBlock}>
+      <Text style={styles.choiceLabel}>{label}</Text>
+      <View style={styles.choiceRow}>
+        {options.map((option) => (
+          <Pressable key={option} onPress={() => onChange(option)} style={({ pressed }) => [styles.choice, value === option && styles.choiceActive, pressed && styles.pressed]}>
+            <Text style={[styles.choiceText, value === option && styles.choiceTextActive]}>{option}</Text>
+          </Pressable>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+function CommandCenter({ brief, onReset }: { brief: Brief; onReset: () => void }) {
+  const [approved, setApproved] = useState(false);
   const approve = async () => {
     await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setApproved(true);
   };
 
   return (
-    <LinearGradient colors={['#10161A', '#080A0D']} style={styles.background}>
+    <View style={styles.root}>
+      <StatusBar style="light" />
+      <LinearGradient colors={['#111419', '#090A0D']} style={StyleSheet.absoluteFill} />
       <SafeAreaView style={styles.safe}>
-        <StatusBar style="light" />
-        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-          <View style={styles.header}>
-            <View>
-              <Text style={styles.brand}>GUILDLESS</Text>
-              <Text style={styles.subtitle}>ONE PERSON · FULL STUDIO</Text>
-            </View>
-            <Pressable accessibilityRole="button" accessibilityLabel="設定" style={({ pressed }) => [styles.avatar, pressed && styles.pressed]}>
-              <Text style={styles.avatarText}>K</Text>
-            </Pressable>
+        <View style={styles.nav}>
+          <Text style={styles.wordmark}>GUILDLESS</Text>
+          <Pressable onPress={onReset} style={({ pressed }) => [styles.profile, pressed && styles.pressed]}><Text style={styles.profileText}>K</Text></Pressable>
+        </View>
+        <ScrollView contentContainerStyle={styles.commandScroll} showsVerticalScrollIndicator={false}>
+          <View style={styles.liveRow}><View style={styles.signal} /><Text style={styles.eyebrow}>COMPANY ONLINE</Text><Text style={styles.elapsed}>00:01:42</Text></View>
+          <Text style={styles.commandTitle}>{brief.goal}</Text>
+          <Text style={styles.commandMeta}>{brief.deadline} · {brief.budget} ceiling</Text>
+
+          <View style={styles.progressCard}>
+            <View style={styles.progressTop}><Text style={styles.progressPhase}>DISCOVERY</Text><Text style={styles.progressPercent}>12%</Text></View>
+            <View style={styles.track}><View style={styles.fill} /></View>
+            <Text style={styles.progressDetail}>Codex is decomposing the mission into independently verifiable work.</Text>
           </View>
 
-          <LinearGradient colors={['#27351F', '#18231B']} style={styles.missionCard}>
-            <View style={styles.missionTop}>
-              <View style={styles.livePill}><View style={styles.liveDot} /><Text style={styles.liveText}>LIVE MISSION</Text></View>
-              <Text style={styles.day}>DAY 18 / 90</Text>
-            </View>
-            <Text style={styles.missionTitle}>協力型ローグライトを{`\n`}Steamへ公開する</Text>
-            <Text style={styles.missionMeta}>Nightfall · 予算 ¥100,000 / 月</Text>
-            <View style={styles.progressTrack}><View style={[styles.progressFill, { width: '21%' }]} /></View>
-            <View style={styles.metrics}>
-              <View><Text style={styles.metricValue}>47</Text><Text style={styles.metricLabel}>今日のタスク</Text></View>
-              <View><Text style={styles.metricValue}>12</Text><Text style={styles.metricLabel}>稼働中AI</Text></View>
-              <View><Text style={styles.metricValue}>¥38k</Text><Text style={styles.metricLabel}>今月の費用</Text></View>
-            </View>
-          </LinearGradient>
-
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>AI Studio</Text>
-            <Text style={styles.sectionAction}>役割で自動選択</Text>
-          </View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.agentRow}>
-            {agents.map((agent) => (
-              <Pressable
-                key={agent.provider}
-                accessibilityRole="button"
-                accessibilityLabel={`${agent.provider}、${agent.task}`}
-                onPress={() => setSelectedAgent(selectedAgent?.provider === agent.provider ? null : agent)}
-                style={({ pressed }) => [styles.agentCard, selectedAgent?.provider === agent.provider && styles.agentSelected, pressed && styles.pressed]}
-              >
-                <View style={[styles.agentMark, { backgroundColor: agent.color }]}><Text style={styles.agentMarkText}>{agent.mark}</Text></View>
-                <Text style={styles.agentName}>{agent.name}</Text>
-                <Text style={styles.agentProvider}>{agent.provider}</Text>
-                <Text style={styles.agentTask} numberOfLines={2}>{agent.task}</Text>
-                <View style={styles.agentStatus}><View style={[styles.statusDot, agent.status === 'waiting' && styles.waitingDot]} /><Text style={styles.statusText}>{agent.status === 'working' ? '実行中' : agent.status === 'reviewing' ? '検査中' : '待機'}</Text></View>
-              </Pressable>
-            ))}
-          </ScrollView>
-          {selectedAgent && (
-            <View style={styles.agentDetail}>
-              <Text style={styles.agentDetailText}>{selectedAgent.provider}は「{selectedAgent.task}」を担当。作者とレビュアーは別プロバイダーに固定されています。</Text>
-            </View>
-          )}
-
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Production line</Text>
-            <Text style={styles.sectionAction}>証拠がなければ公開しない</Text>
-          </View>
-          <View style={styles.panel}>
-            {stages.map(([name, value, active], index) => (
-              <View style={[styles.stage, index === stages.length - 1 && styles.stageLast]} key={String(name)}>
-                <View style={[styles.stageIndicator, active ? styles.stageActive : styles.stageInactive]}>
-                  <Text style={[styles.stageNumber, active && styles.stageNumberActive]}>{index < 2 ? '✓' : index + 1}</Text>
-                </View>
-                <View style={styles.stageCopy}><Text style={styles.stageName}>{name}</Text><Text style={styles.stageOwner}>{index % 2 ? 'OpenAI' : 'Anthropic'}</Text></View>
-                <Text style={[styles.stageValue, active && index === 3 && styles.acidText]}>{value}</Text>
+          <Text style={styles.sectionLabel}>AUTONOMOUS CREW</Text>
+          <View style={styles.crewList}>
+            {crew.map(([role, model, task, color], index) => (
+              <View style={[styles.crewRow, index === crew.length - 1 && { borderBottomWidth: 0 }]} key={role}>
+                <View style={[styles.crewMark, { backgroundColor: color }]}><Text style={styles.crewMarkText}>{model[0]}</Text></View>
+                <View style={styles.crewCopy}><Text style={styles.crewRole}>{role}</Text><Text style={styles.crewTask}>{task}</Text></View>
+                <View style={styles.modelBadge}><Text style={styles.modelText}>{model}</Text></View>
               </View>
             ))}
           </View>
 
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>あなたの判断</Text>
-            {!approved && <View style={styles.count}><Text style={styles.countText}>1</Text></View>}
-          </View>
-          <View style={[styles.approvalCard, approved && styles.approvedCard]}>
-            <View style={styles.approvalTop}>
-              <Text style={styles.approvalType}>{approved ? 'APPROVED' : 'PRODUCT DECISION'}</Text>
-              <Text style={styles.approvalCost}>追加 ¥1,840</Text>
-            </View>
-            <Text style={styles.approvalTitle}>{approved ? 'PV制作を承認しました' : '30秒のローンチPVを制作する'}</Text>
-            <Text style={styles.approvalBody}>{approved ? 'Geminiが構成を確認し、Seedanceへ映像制作を委任します。' : 'プレイ映像と生成素材から3案を制作。広告テストにも転用します。'}</Text>
-            {!approved && (
-              <View style={styles.approvalActions}>
-                <Pressable accessibilityRole="button" style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressed]}><Text style={styles.secondaryButtonText}>詳細</Text></Pressable>
-                <Pressable accessibilityRole="button" onPress={approve} style={({ pressed }) => [styles.primaryButton, pressed && styles.pressed]}><Text style={styles.primaryButtonText}>承認する</Text></Pressable>
-              </View>
-            )}
+          <Text style={styles.sectionLabel}>YOUR ATTENTION</Text>
+          <View style={[styles.decision, approved && styles.decisionApproved]}>
+            <Text style={styles.decisionLabel}>{approved ? 'DECISION RECORDED' : 'HIGH-IMPACT DECISION'}</Text>
+            <Text style={styles.decisionTitle}>{approved ? 'The crew is moving forward.' : 'Approve the product direction'}</Text>
+            <Text style={styles.decisionBody}>{approved ? 'Every downstream agent received the decision and its rationale.' : 'Three concepts were challenged by separate reviewers. Concept B has the strongest retention hypothesis and lowest delivery risk.'}</Text>
+            {!approved && <Pressable onPress={approve} style={({ pressed }) => [styles.approve, pressed && styles.pressed]}><Text style={styles.approveText}>Review evidence</Text><Text style={styles.darkArrow}>→</Text></Pressable>}
           </View>
         </ScrollView>
-
-        <View style={styles.tabBar}>
-          {[['⌂', 'Overview'], ['⌁', 'Missions'], ['◫', 'Artifacts'], ['✓', 'Approvals']].map(([icon, label], index) => (
-            <Pressable key={label} accessibilityRole="button" style={({ pressed }) => [styles.tab, pressed && styles.pressed]}>
-              <Text style={[styles.tabIcon, index === 0 && styles.tabActive]}>{icon}</Text>
-              <Text style={[styles.tabLabel, index === 0 && styles.tabActive]}>{label}</Text>
-            </Pressable>
-          ))}
-        </View>
       </SafeAreaView>
-    </LinearGradient>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  background: { flex: 1 },
+  root: { flex: 1, backgroundColor: '#090A0D' },
   safe: { flex: 1 },
-  content: { paddingHorizontal: 18, paddingTop: Platform.OS === 'android' ? 36 : 10, paddingBottom: 116 },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 22 },
-  brand: { color: '#F5F7F8', fontSize: 17, fontWeight: '800', letterSpacing: 1.2 },
-  subtitle: { color: '#6D7881', fontSize: 8, fontWeight: '700', letterSpacing: 1.6, marginTop: 4 },
-  avatar: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#242B30', alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: '#465058' },
-  avatarText: { color: '#D9FF66', fontWeight: '800' },
-  missionCard: { borderRadius: 24, padding: 20, borderWidth: StyleSheet.hairlineWidth, borderColor: '#46573A', overflow: 'hidden' },
-  missionTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  livePill: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(12,16,12,.45)', paddingHorizontal: 9, paddingVertical: 6, borderRadius: 12 },
-  liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#D9FF66', marginRight: 6 },
-  liveText: { color: '#D9FF66', fontSize: 8, fontWeight: '800', letterSpacing: 1 },
-  day: { color: '#9EAA94', fontSize: 9, fontWeight: '700', letterSpacing: .8 },
-  missionTitle: { color: '#F7F9F6', fontSize: 27, lineHeight: 34, fontWeight: '700', letterSpacing: -.7, marginTop: 18 },
-  missionMeta: { color: '#9BA597', fontSize: 11, marginTop: 8 },
-  progressTrack: { height: 5, borderRadius: 3, backgroundColor: 'rgba(255,255,255,.1)', marginTop: 20, overflow: 'hidden' },
-  progressFill: { height: 5, borderRadius: 3, backgroundColor: '#D9FF66' },
-  metrics: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 19, paddingRight: 16 },
-  metricValue: { color: '#F2F6ED', fontSize: 17, fontWeight: '700', fontVariant: ['tabular-nums'] },
-  metricLabel: { color: '#869080', fontSize: 9, marginTop: 3 },
-  sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 27, marginBottom: 12 },
-  sectionTitle: { color: '#F1F4F6', fontSize: 17, fontWeight: '700', letterSpacing: -.2 },
-  sectionAction: { color: '#747F88', fontSize: 9 },
-  agentRow: { gap: 10, paddingRight: 20 },
-  agentCard: { width: 136, minHeight: 167, borderRadius: 19, backgroundColor: '#151A1F', padding: 14, borderWidth: StyleSheet.hairlineWidth, borderColor: '#2B333A' },
-  agentSelected: { borderColor: '#D9FF66', backgroundColor: '#182018' },
-  agentMark: { width: 32, height: 32, borderRadius: 10, alignItems: 'center', justifyContent: 'center', marginBottom: 14 },
-  agentMarkText: { color: '#FFFFFF', fontSize: 12, fontWeight: '900' },
-  agentName: { color: '#F0F3F5', fontSize: 13, fontWeight: '700' },
-  agentProvider: { color: '#76818A', fontSize: 9, marginTop: 2 },
-  agentTask: { color: '#A8B0B6', fontSize: 10, lineHeight: 14, marginTop: 10, minHeight: 28 },
-  agentStatus: { flexDirection: 'row', alignItems: 'center', marginTop: 11 },
-  statusDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: '#D9FF66', marginRight: 5 },
-  waitingDot: { backgroundColor: '#59636B' },
-  statusText: { color: '#78838B', fontSize: 8 },
-  agentDetail: { backgroundColor: '#171D20', padding: 13, borderRadius: 14, marginTop: 10 },
-  agentDetailText: { color: '#9DA8AE', fontSize: 10, lineHeight: 15 },
-  panel: { borderRadius: 20, backgroundColor: '#13181C', paddingHorizontal: 15, borderWidth: StyleSheet.hairlineWidth, borderColor: '#283038' },
-  stage: { minHeight: 61, flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#262D33' },
-  stageLast: { borderBottomWidth: 0 },
-  stageIndicator: { width: 28, height: 28, borderRadius: 9, alignItems: 'center', justifyContent: 'center', marginRight: 11 },
-  stageActive: { backgroundColor: '#28331F' },
-  stageInactive: { backgroundColor: '#20262B' },
-  stageNumber: { color: '#68737B', fontSize: 10, fontWeight: '700' },
-  stageNumberActive: { color: '#D9FF66' },
-  stageCopy: { flex: 1 },
-  stageName: { color: '#E5E9EB', fontSize: 12, fontWeight: '600' },
-  stageOwner: { color: '#68737B', fontSize: 8, marginTop: 3 },
-  stageValue: { color: '#657079', fontSize: 9, fontVariant: ['tabular-nums'] },
-  acidText: { color: '#D9FF66' },
-  count: { width: 19, height: 19, borderRadius: 10, backgroundColor: '#FF765C', alignItems: 'center', justifyContent: 'center' },
-  countText: { color: '#FFFFFF', fontSize: 10, fontWeight: '800' },
-  approvalCard: { borderRadius: 20, backgroundColor: '#1C1817', padding: 17, borderWidth: StyleSheet.hairlineWidth, borderColor: '#514137' },
-  approvedCard: { backgroundColor: '#172019', borderColor: '#3B553B' },
-  approvalTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  approvalType: { color: '#FFB27A', fontSize: 8, fontWeight: '800', letterSpacing: 1 },
-  approvalCost: { color: '#8E817B', fontSize: 9 },
-  approvalTitle: { color: '#F4F0EE', fontSize: 16, fontWeight: '700', marginTop: 13 },
-  approvalBody: { color: '#988E89', fontSize: 10, lineHeight: 16, marginTop: 7 },
-  approvalActions: { flexDirection: 'row', gap: 9, marginTop: 16 },
-  secondaryButton: { flex: 1, minHeight: 43, borderRadius: 13, alignItems: 'center', justifyContent: 'center', backgroundColor: '#282321' },
-  secondaryButtonText: { color: '#B2AAA6', fontSize: 12, fontWeight: '600' },
-  primaryButton: { flex: 1.5, minHeight: 43, borderRadius: 13, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F1F3EE' },
-  primaryButtonText: { color: '#171A16', fontSize: 12, fontWeight: '700' },
-  pressed: { opacity: .72, transform: [{ scale: .98 }] },
-  tabBar: { position: 'absolute', left: 12, right: 12, bottom: Platform.OS === 'ios' ? 8 : 12, height: 72, borderRadius: 25, backgroundColor: 'rgba(26,31,35,.96)', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around', borderWidth: StyleSheet.hairlineWidth, borderColor: '#394149', paddingBottom: Platform.OS === 'ios' ? 5 : 0 },
-  tab: { width: 74, alignItems: 'center', justifyContent: 'center', paddingVertical: 8 },
-  tabIcon: { color: '#65717A', fontSize: 18, marginBottom: 4 },
-  tabLabel: { color: '#65717A', fontSize: 8, fontWeight: '600' },
-  tabActive: { color: '#D9FF66' },
+  glow: { position: 'absolute', width: 360, height: 360, borderRadius: 180, backgroundColor: 'rgba(157,190,91,.09)', top: -210, right: -100 },
+  nav: { height: 72, paddingHorizontal: 22, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: Platform.OS === 'android' ? 18 : 0 },
+  wordmark: { color: '#F4F5F2', fontSize: 14, fontWeight: '800', letterSpacing: 2.2 },
+  stepLabel: { color: '#747982', fontSize: 11, fontWeight: '700', letterSpacing: 1.2, fontVariant: ['tabular-nums'] },
+  onboarding: { flex: 1, paddingHorizontal: 22, paddingTop: 42 },
+  eyebrowRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 18 },
+  signal: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#D8FF62', marginRight: 8 },
+  eyebrow: { color: '#AAB1B8', fontSize: 10, fontWeight: '800', letterSpacing: 1.6 },
+  hero: { color: '#F4F5F2', fontSize: 39, lineHeight: 43, letterSpacing: -1.5, fontWeight: '700' },
+  heroBody: { color: '#91969E', fontSize: 15, lineHeight: 23, marginTop: 18, maxWidth: 360 },
+  inputShell: { minHeight: 132, borderRadius: 20, backgroundColor: '#15181D', borderWidth: 1, borderColor: '#343A43', marginTop: 34, padding: 18 },
+  input: { flex: 1, color: '#F5F6F3', fontSize: 18, lineHeight: 25, textAlignVertical: 'top', padding: 0 },
+  inputHint: { color: '#626871', fontSize: 8, fontWeight: '800', letterSpacing: 1.2, marginTop: 12 },
+  chips: { gap: 8, paddingTop: 13, paddingRight: 22 },
+  chip: { borderWidth: 1, borderColor: '#30353D', borderRadius: 99, paddingHorizontal: 14, paddingVertical: 10, backgroundColor: '#111419' },
+  chipText: { color: '#A8ADB5', fontSize: 11, fontWeight: '600' },
+  footer: { paddingHorizontal: 22, paddingBottom: Platform.OS === 'ios' ? 10 : 18, flexDirection: 'row', alignItems: 'center', gap: 14 },
+  footerNote: { flex: 1, color: '#626871', fontSize: 10 },
+  continueButton: { minWidth: 166, height: 56, borderRadius: 17, paddingHorizontal: 19, backgroundColor: '#D8FF62', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  buttonDisabled: { opacity: .28 },
+  continueText: { color: '#12150D', fontSize: 14, fontWeight: '800' },
+  arrow: { color: '#12150D', fontSize: 21, marginLeft: 20 },
+  pressed: { opacity: .72, transform: [{ scale: .975 }] },
+  summaryCard: { backgroundColor: '#15181D', borderRadius: 18, borderWidth: 1, borderColor: '#2B3038', padding: 17, marginTop: 28 },
+  summaryLabel: { color: '#656B74', fontSize: 8, fontWeight: '800', letterSpacing: 1.3 },
+  summaryValue: { color: '#E9EBE7', fontSize: 15, lineHeight: 21, fontWeight: '600', marginTop: 8 },
+  choiceBlock: { marginTop: 24 },
+  choiceLabel: { color: '#777D86', fontSize: 9, fontWeight: '800', letterSpacing: 1.3, marginBottom: 10 },
+  choiceRow: { flexDirection: 'row', gap: 8 },
+  choice: { flex: 1, height: 45, borderRadius: 13, borderWidth: 1, borderColor: '#2D323A', alignItems: 'center', justifyContent: 'center', backgroundColor: '#12151A' },
+  choiceActive: { backgroundColor: '#EAECE7', borderColor: '#EAECE7' },
+  choiceText: { color: '#848A93', fontSize: 11, fontWeight: '700' },
+  choiceTextActive: { color: '#171A16' },
+  guardrail: { flexDirection: 'row', backgroundColor: '#131812', borderRadius: 14, padding: 14, marginTop: 24, alignItems: 'flex-start' },
+  guardrailMark: { color: '#D8FF62', fontSize: 12, fontWeight: '900', marginRight: 10 },
+  guardrailText: { color: '#8F9987', fontSize: 10, lineHeight: 15, flex: 1 },
+  profile: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#20242A', alignItems: 'center', justifyContent: 'center' },
+  profileText: { color: '#D8FF62', fontSize: 12, fontWeight: '800' },
+  commandScroll: { paddingHorizontal: 22, paddingTop: 28, paddingBottom: 60 },
+  liveRow: { flexDirection: 'row', alignItems: 'center' },
+  elapsed: { color: '#616770', fontSize: 9, fontVariant: ['tabular-nums'], marginLeft: 'auto' },
+  commandTitle: { color: '#F3F4F1', fontSize: 31, lineHeight: 36, letterSpacing: -1, fontWeight: '700', marginTop: 16 },
+  commandMeta: { color: '#737982', fontSize: 11, marginTop: 9 },
+  progressCard: { borderRadius: 20, backgroundColor: '#15191D', borderWidth: 1, borderColor: '#2A3037', padding: 18, marginTop: 28 },
+  progressTop: { flexDirection: 'row', justifyContent: 'space-between' },
+  progressPhase: { color: '#D8FF62', fontSize: 9, fontWeight: '800', letterSpacing: 1.3 },
+  progressPercent: { color: '#8C929A', fontSize: 10, fontWeight: '700' },
+  track: { height: 4, backgroundColor: '#2A2F34', borderRadius: 2, marginTop: 15, overflow: 'hidden' },
+  fill: { width: '12%', height: 4, backgroundColor: '#D8FF62', borderRadius: 2 },
+  progressDetail: { color: '#8D939B', fontSize: 11, lineHeight: 17, marginTop: 14 },
+  sectionLabel: { color: '#676D76', fontSize: 9, fontWeight: '800', letterSpacing: 1.5, marginTop: 28, marginBottom: 11 },
+  crewList: { backgroundColor: '#13161A', borderRadius: 20, paddingHorizontal: 15, borderWidth: 1, borderColor: '#292E35' },
+  crewRow: { minHeight: 69, flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#292E35' },
+  crewMark: { width: 32, height: 32, borderRadius: 10, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
+  crewMarkText: { color: '#14171A', fontSize: 11, fontWeight: '900' },
+  crewCopy: { flex: 1 },
+  crewRole: { color: '#E1E4E0', fontSize: 10, fontWeight: '800', letterSpacing: .7 },
+  crewTask: { color: '#6F757E', fontSize: 9, marginTop: 4 },
+  modelBadge: { paddingHorizontal: 8, paddingVertical: 5, borderRadius: 7, backgroundColor: '#20242A' },
+  modelText: { color: '#8D939C', fontSize: 8, fontWeight: '700' },
+  decision: { backgroundColor: '#211B18', borderRadius: 20, borderWidth: 1, borderColor: '#49382F', padding: 18 },
+  decisionApproved: { backgroundColor: '#151D15', borderColor: '#344832' },
+  decisionLabel: { color: '#EFA06C', fontSize: 8, fontWeight: '800', letterSpacing: 1.3 },
+  decisionTitle: { color: '#F2F1EE', fontSize: 17, fontWeight: '700', marginTop: 12 },
+  decisionBody: { color: '#968D88', fontSize: 11, lineHeight: 17, marginTop: 8 },
+  approve: { height: 48, borderRadius: 14, backgroundColor: '#F0F1ED', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, marginTop: 17 },
+  approveText: { color: '#171914', fontSize: 12, fontWeight: '800' },
+  darkArrow: { color: '#171914', fontSize: 18 },
 });
