@@ -125,6 +125,13 @@ Generated assets only count when they are licensed, traceable, editable, integra
 
 ## Core architecture
 
+The detailed, implementation-level design is in
+[`docs/control-plane-spec.md`](docs/control-plane-spec.md). It defines durable
+execution, the event ledger, versioned work graphs, scheduling, engine routing,
+artifact/evidence contracts, independent review, authority grants, budget
+reservation, failure recovery, operations, security, and the test gates that
+must pass before the product can claim solo large-scale development.
+
 | Component | Responsibility |
 | --- | --- |
 | Mission compiler | Convert intent into milestones, tasks, dependencies, tests, and budgets |
