@@ -340,7 +340,118 @@ Static defaults are allowed only during bootstrap. Production routing learns fro
 
 Provider subscriptions and user-installed CLIs use bring-your-own-account mode. Hosted API mode is optional and separately billed. Interactive-only products may assist a human decision but cannot hold an unattended scheduler lease.
 
-## 10. Worker protocol
+## 10. Evidence scout and human-quality judgment
+
+Before a subjective product, design, technology, or model-routing decision, an
+evidence scout constructs an `EvidencePack`. Grok is the preferred scout when X
+search is available because it can search public conversation and code-oriented
+sources; GitHub search and product/reference crawlers remain independent tools.
+The scout never makes the final decision alone.
+
+Evidence sources include:
+
+- GitHub repositories, releases, issues, forks, stars, dependency use, license,
+  security posture, maintenance, and reproducible demos;
+- X posts, threads, replies, views, likes, reposts, and especially bookmarks,
+  with timestamp and author provenance;
+- shipped products, store ratings, case studies, conversion or retention data,
+  performance traces, accessibility audits, and user tests;
+- reference galleries such as motionsites.ai when an actual shipped result and
+  source provenance can be inspected;
+- internal GUILDLESS outcomes: acceptance rate, defect escapes, cost, latency,
+  visual-review verdicts, and owner overrides.
+
+Stars, likes, and views are discovery signals, not proof of quality. They can be
+old, bought, botted, driven by an author's audience, or unrelated to the exact
+task. Ranking weights task fit, demonstrated output quality, reproducibility,
+maintenance, adoption, freshness, license, and manipulation risk. Task fit and
+demonstrated quality must outweigh raw popularity.
+
+```ts
+type EvidenceCandidate = {
+  url: string;
+  channel: "github" | "x" | "product" | "store" | "benchmark" | "internal";
+  capturedAt: string;
+  author?: string;
+  artifactType: string;
+  metrics: Record<string, number>;
+  taskFit: number;
+  demonstratedQuality: number;
+  reproducibility: number;
+  maintenance: number;
+  license?: string;
+  manipulationRisk: number;
+};
+```
+
+A decision is evidence-ready only when it has at least three usable references,
+at least two independent channels, one reproducible implementation or procedure,
+and one demonstrated high-quality result. Direct reuse additionally requires a
+compatible license. Screenshots and quoted posts are stored with capture time so
+later edits or deletions do not silently rewrite the decision history.
+
+### 10.1 Judgment roles
+
+```text
+Scout (Grok/search tools)
+  -> collects candidates and counterexamples
+Analyst (Kimi or low-cost independent model)
+  -> normalizes evidence, detects hype and missing proof
+Director (best available reasoning/vision model)
+  -> proposes a decision against the product contract
+Critic (different provider)
+  -> attacks usability, originality, feasibility, and accessibility
+Verifier (deterministic tools + real user/owner evidence)
+  -> measures the built result
+```
+
+Kimi may judge routine choices only after calibration against owner decisions.
+Its score is tracked by agreement, later owner reversals, user outcomes, defects,
+and business metrics. Agreement with another model is not human-equivalent taste.
+When confidence or calibration is insufficient, the owner receives two or three
+concrete rendered alternatives rather than an abstract question.
+
+### 10.2 Artifact-level routing
+
+Routing happens at artifact level, not project level:
+
+- GPT Image produces original imagery, button art, textures, icons, or visual
+  variants when raster generation is useful;
+- Claude/Fable or another measured coding engine implements the product;
+- Kimi handles economical monitoring, triage, maintenance, and calibrated
+  evidence analysis;
+- Seedance or Kling produces video backgrounds, cinematic sequences, trailers,
+  or reference-driven motion clips;
+- Motion, GSAP, native iOS animation, or CSS implements interactive UI motion;
+- deterministic tools measure bundle size, frame rate, contrast, accessibility,
+  tests, and conversion events.
+
+Using Seedance for a button press or encoding interactive text inside a video is
+a routing error. Using CSS animation for a cinematic generated background may be
+an equally bad routing error. The output contract decides.
+
+### 10.3 Example: premium landing page
+
+For a prompt such as the attached Wintage specification, the system must:
+
+1. extract the business goal, audience, conversion event, performance budget,
+   accessibility contract, and originality constraints before visual details;
+2. inspect the named reference and find separately validated alternatives;
+3. check every supplied media URL, license, availability, and mobile cost;
+4. search X for recent demonstrated motion/video workflows and failure reports;
+5. search GitHub for maintained, licensed implementations and inspect issues;
+6. assign generated background video to Seedance/Kling only when video is part of
+   the concept; assign interactive motion to a UI animation runtime;
+7. generate original visual assets rather than tracing the reference;
+8. have one engine implement and another critique the rendered result;
+9. verify real screenshots, reduced motion, touch behavior, Web Vitals, contrast,
+   keyboard use, and CTA analytics;
+10. retain the EvidencePack and explain why each reference or engine was chosen.
+
+The output target is not “looks close to the prompt.” It is a usable, original,
+measured product that a human audience demonstrably prefers.
+
+## 11. Worker protocol
 
 Workers never receive the entire organization transcript. They receive a bounded work packet:
 
@@ -375,7 +486,7 @@ type WorkSubmission = {
 
 Free-form prose may accompany the response but cannot replace the schema.
 
-## 11. Workspace isolation
+## 12. Workspace isolation
 
 Every mutating run executes in an isolated workspace derived from an immutable base revision.
 
@@ -399,9 +510,9 @@ Game and media workspace:
 
 No worker writes directly to the integration branch or production environment.
 
-## 12. Review and verification
+## 13. Review and verification
 
-### 12.1 Separation rules
+### 13.1 Separation rules
 
 - specification, test authorship, implementation, review, fixing, and final verification are distinct roles;
 - reviewer provider must differ from producer provider for medium or higher risk;
@@ -410,7 +521,7 @@ No worker writes directly to the integration branch or production environment.
 - critical work requires two independent review verdicts or one review plus a domain-specific deterministic gate;
 - fixes invalidate affected evidence and return to review.
 
-### 12.2 Review contract
+### 13.2 Review contract
 
 A reviewer must output findings with severity, location, violated criterion, evidence, and proposed verification. Vague approval is inconclusive.
 
@@ -423,7 +534,7 @@ type ReviewVerdict = {
 };
 ```
 
-### 12.3 Acceptance gate
+### 13.3 Acceptance gate
 
 The gate computes acceptance from policy:
 
@@ -439,7 +550,7 @@ accepted = required_artifacts_present
 
 Models cannot override this expression. A human may waive a criterion only by creating a signed decision record with scope, reason, and expiry.
 
-### 12.4 Beyond code
+### 13.4 Beyond code
 
 UI and visual assets require:
 
@@ -453,7 +564,7 @@ UI and visual assets require:
 
 Game work additionally requires performance budgets, deterministic smoke scenes, save compatibility checks, controller/input coverage, content validation, and playtest telemetry.
 
-## 13. Integration
+## 14. Integration
 
 The integrator is a control-plane service, not the implementation agent.
 
@@ -468,7 +579,7 @@ The integrator is a control-plane service, not the implementation agent.
 
 Direct model-authored merges to the protected branch are prohibited.
 
-## 14. Authority model
+## 15. Authority model
 
 Authority is expressed as capability grants:
 
@@ -498,7 +609,7 @@ Default autonomy levels:
 
 Payments, public publishing, legal acceptance, credential changes, destructive data operations, and irreversible migrations never inherit authority from a broad mission instruction.
 
-## 15. Budget control
+## 16. Budget control
 
 Budgeting operates at mission, horizon, work item, run, provider, and external-service levels.
 
@@ -513,7 +624,7 @@ Before a run:
 
 The system reports cost per accepted artifact and cost per escaped defect, not just tokens. Retry storms trigger a circuit breaker. The planner must propose scope reduction or a cheaper strategy before asking for more money.
 
-## 16. Durable execution and event ledger
+## 17. Durable execution and event ledger
 
 The source of truth is an append-only event stream plus rebuildable projections.
 
@@ -533,7 +644,7 @@ Each event contains sequence number, aggregate version, actor, correlation ID, c
 
 Checkpoints store worker-continuation data but never replace events. A checkpoint includes repository revision, pending tool call, partial artifact manifest, spend, and a provider-neutral summary so another engine can resume.
 
-## 17. Failure handling
+## 18. Failure handling
 
 | Failure | Automatic response | Escalation condition |
 | --- | --- | --- |
@@ -550,7 +661,7 @@ Checkpoints store worker-continuation data but never replace events. A checkpoin
 
 Retries must change something: engine, context, decomposition, tool, or hypothesis. Blindly replaying the same failed prompt is prohibited.
 
-## 18. Operations loop
+## 19. Operations loop
 
 After release, telemetry is normalized into signals:
 
@@ -566,7 +677,7 @@ Rules convert signals into incidents, maintenance items, experiments, or growth 
 
 The system maintains runbooks as versioned artifacts. Every incident must update or validate a runbook and record detection time, mitigation time, owner interruption, and recurrence prevention.
 
-## 19. Memory and organizational learning
+## 20. Memory and organizational learning
 
 GUILDLESS stores four different forms of memory:
 
@@ -577,7 +688,7 @@ GUILDLESS stores four different forms of memory:
 
 Unverified model prose is not promoted to organizational memory. Facts require a source. Procedures require successful evidence. Decisions are immutable and may only be superseded. Performance data is time-decayed and segmented by model version.
 
-## 20. Human attention design
+## 21. Human attention design
 
 The owner inbox contains only:
 
@@ -589,7 +700,7 @@ The owner inbox contains only:
 
 Every request must include the decision deadline, recommended option, alternatives, evidence, cost of delay, default safe action, and whether it blocks the critical path. Notification volume and owner minutes are tracked as system defects.
 
-### 20.1 Voice directive layer
+### 21.1 Voice directive layer
 
 Voice is the primary capture interface for owner intent, but a transcript is not
 an executable mission. The voice layer is an intent compiler with an explicit
@@ -645,7 +756,7 @@ The interaction target is not a conversational assistant that keeps talking.
 It is a quiet chief of staff: listen, structure, expose consequential ambiguity,
 read back the intended company action, and then execute after one clear commit.
 
-## 21. Storage and services
+## 22. Storage and services
 
 Bootstrap deployment may be a modular monolith, but boundaries are explicit:
 
@@ -661,7 +772,7 @@ Bootstrap deployment may be a modular monolith, but boundaries are explicit:
 
 SQLite is acceptable for a local single-machine prototype. It is not the target for horizontally scheduled production workers.
 
-## 22. API surface
+## 23. API surface
 
 Minimum commands or endpoints:
 
@@ -687,7 +798,7 @@ POST /webhooks/telemetry
 
 All mutations require idempotency keys. Reads expose provenance and current projection sequence so clients can detect stale state.
 
-## 23. Security baseline
+## 24. Security baseline
 
 - deny tools and networks by default;
 - short-lived scoped credentials from a broker;
@@ -703,7 +814,7 @@ All mutations require idempotency keys. Reads expose provenance and current proj
 
 External pages, issues, emails, assets, and repository content are data, not instructions. A worker cannot expand its tool grants based on text found in those sources.
 
-## 24. Observability and service objectives
+## 25. Observability and service objectives
 
 Control-plane metrics:
 
@@ -728,7 +839,7 @@ Initial service objectives:
 - median ready-to-lease under 10 seconds locally;
 - safe pause of new work within 30 seconds.
 
-## 25. Implementation sequence
+## 26. Implementation sequence
 
 ### Milestone 0: Replace the toy planner
 
@@ -802,7 +913,7 @@ Deliver:
 
 Exit test: produce and operate one small commercial-quality vertical slice. Only after this passes should scope expand toward the 90-day large-project benchmark.
 
-## 26. Required test matrix
+## 27. Required test matrix
 
 Every control-plane release must test:
 
@@ -822,7 +933,7 @@ Every control-plane release must test:
 - projection rebuild;
 - pause and kill-switch latency.
 
-## 27. Go/no-go gates
+## 28. Go/no-go gates
 
 Do not add broad UI or more provider logos until the corresponding gate is satisfied.
 
