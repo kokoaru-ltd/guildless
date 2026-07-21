@@ -1,46 +1,46 @@
 "use client";
-import { useState } from "react";
 
-const proofs=[
-  ["GH","GitHub","motiondivision / motion","29.8k stars · MIT · active",94],
-  ["PR","Product","motionsites.ai","Shipped motion references · inspected",86],
-  ["X","X","Seedance 2.0 direction guide","5.1k views · 178 bookmarks · recent",81],
+import { useMemo, useRef, useState } from "react";
+
+type SpeechRecognitionLike = { lang:string; interimResults:boolean; continuous:boolean; start():void; stop():void; onresult:((event:{results:ArrayLike<{0:{transcript:string}}>})=>void)|null; onend:(()=>void)|null; onerror:(()=>void)|null };
+declare global { interface Window { SpeechRecognition?:new()=>SpeechRecognitionLike; webkitSpeechRecognition?:new()=>SpeechRecognitionLike } }
+
+const roles = [
+  {name:"Codex",role:"Architecture · integration",state:"connected",tone:"green"},
+  {name:"Claude",role:"Implementation · review",state:"connect",tone:"gray"},
+  {name:"Kimi",role:"Operations · maintenance",state:"local",tone:"amber"},
+  {name:"Grok",role:"X · GitHub scouting",state:"key required",tone:"gray"},
+  {name:"Gemini",role:"Multimodal · video",state:"interactive",tone:"blue"},
 ];
-const engines=[
-  ["Codex","Architecture + implementation","Ready","ok"],
-  ["Claude / Fable","Implementation + review","Degraded","warn"],
-  ["Kimi","Evidence analysis + operations","Degraded","warn"],
-  ["Grok Build","X + GitHub scouting","Needs API key","off"],
-  ["Node verifier","Deterministic acceptance","Ready","ok"],
-];
-const work=[
-  ["Normalize owner intent","Codex","complete"],
-  ["Collect human evidence","Grok + GitHub","ready"],
-  ["Challenge design direction","Kimi","blocked"],
-  ["Write acceptance tests","Independent model","queued"],
-  ["Implement vertical slice","Claude / Fable","queued"],
-  ["Verify and integrate","Node + Codex","queued"],
+const initialSteps = [
+  ["01","Evidence scout","Grok + GitHub","waiting"],
+  ["02","Architecture contract","Codex","waiting"],
+  ["03","Independent test design","Kimi","waiting"],
+  ["04","Implementation","Claude","waiting"],
+  ["05","Adversarial review","Codex","waiting"],
+  ["06","Fix + deterministic verification","Claude + Node","waiting"],
 ];
 
 export default function Home(){
-  const [phase,setPhase]=useState<"idle"|"scanning"|"ready">("idle");
-  const [goal,setGoal]=useState("Turn a spoken product idea into a verified, production-ready vertical slice.");
-  const scan=()=>{setPhase("scanning");window.setTimeout(()=>setPhase("ready"),900)};
-  return <main className="shell">
-    <header><a className="brand" href="#top"><b>G</b>GUILDLESS <small>LAB 01</small></a><nav><button className="active">Control plane</button><button>Evidence</button><button>Runs</button></nav><span className="online"><i/>LOCAL CONTROL PLANE</span></header>
-
-    <section className="hero" id="top"><div><div className="kicker"><em>SELF-HOSTED MISSION</em> dogfood-control-plane-m0</div><h1>One owner.<br/><span>An evidence-driven company.</span></h1><p>State the outcome. GUILDLESS researches what humans already value, assigns the best engine to each artifact, and refuses to ship without independent proof.</p></div><aside className="truth"><small>CURRENT TRUTH</small><strong>Planning works.<br/>Autonomous execution does not—yet.</strong><p>Mission compilation, separation of duties, evidence scoring, adapters, and release policy are live. Durable scheduling and end-to-end workers remain unbuilt.</p><div className="meter"><i/></div><footer><span>9 deterministic tests passing</span><b>CONTROL PLANE 18%</b></footer></aside></section>
-
-    <section className="directive"><div className="title"><div><small>OWNER DIRECTIVE</small><h2>What should the company accomplish?</h2></div><span>● Voice capture designed · not connected</span></div><div className="composer"><textarea aria-label="Mission objective" value={goal} onChange={e=>setGoal(e.target.value)}/><footer><div><small>BUDGET CEILING</small><b>¥3,000</b></div><div><small>AUTHORITY</small><b>Sandbox only</b></div><button onClick={scan} disabled={phase==="scanning"}>{phase==="idle"?"Research before planning":phase==="scanning"?"Scanning evidence…":"Evidence ready"}<b>→</b></button></footer></div></section>
-
-    <section className="grid">
-      <article className="panel evidence"><div className="title"><div><small>EVIDENCE ENGINE</small><h2>Human proof, before AI judgment</h2></div><span className={`pill ${phase}`}>{phase==="idle"?"NOT RUN":phase==="scanning"?"SCANNING":"DECISION READY"}</span></div><p className="intro">Popularity discovers candidates. Task fit, demonstrated quality, reproducibility, maintenance, and license decide what survives.</p>{phase==="ready"?<div className="proofs">{proofs.map((p,i)=><div className="proof" key={String(p[2])} style={{animationDelay:`${i*50}ms`}}><b className={`source s${i}`}>{p[0]}</b><div><small>{p[1]}</small><strong>{p[2]}</strong><span>{p[3]}</span></div><em>{p[4]}<small>/100</small></em></div>)}</div>:<div className={`empty ${phase}`}><i/><span>{phase==="scanning"?"Inspecting sources and licenses":"Run research to build an Evidence Pack"}</span></div>}<footer className="weights"><span>FIT <b>30%</b></span><span>QUALITY <b>25%</b></span><span>REPRODUCIBLE <b>15%</b></span><span>ADOPTION <b>10%</b></span></footer></article>
-
-      <article className="panel engines"><div className="title"><div><small>ENGINE HEALTH</small><h2>Capability, not loyalty</h2></div><button aria-label="Refresh">↻</button></div><div className="engine-list">{engines.map(e=><div className="engine" key={e[0]}><i className={e[3]}/><div><strong>{e[0]}</strong><span>{e[1]}</span></div><em>{e[2]}</em></div>)}</div><aside><b>!</b> Installed is not healthy. Claude and Kimi connected but timed out during unattended trials.</aside></article>
-
-      <article className="panel graph"><div className="title"><div><small>VERIFIED WORK GRAPH</small><h2>Nothing completes by self-report</h2></div><span>GRAPH v1</span></div><div>{work.map((w,i)=><div className={`task ${w[2]}`} key={w[0]}><b>{w[2]==="complete"?"✓":i+1}</b><div><strong>{w[0]}</strong><small>{w[1]}</small></div><em>{w[2]}</em></div>)}</div></article>
-
-      <article className="panel gate"><small>RELEASE GATE</small><h2>Blocked by evidence,<br/>not optimism.</h2><strong className="count">0<span>/ 4</span></strong><ul><li>Reproducible build</li><li>Deterministic tests</li><li>Independent review</li><li>Rollback rehearsal</li></ul><button disabled>Release unavailable</button></article>
-    </section>
+  const [brief,setBrief]=useState(""); const [listening,setListening]=useState(false); const [mission,setMission]=useState(false); const [active,setActive]=useState("Command");
+  const recognition=useRef<SpeechRecognitionLike|null>(null); const chars=brief.trim().length;
+  const steps=useMemo(()=>initialSteps.map((step,index)=>[...step.slice(0,3),mission&&index===0?"ready":step[3]]),[mission]);
+  function toggleVoice(){
+    if(listening){recognition.current?.stop();setListening(false);return}
+    const Speech=window.SpeechRecognition||window.webkitSpeechRecognition;
+    if(!Speech){alert("Voice input is not available in this browser. Use Chrome or Edge, or type the directive.");return}
+    const instance=new Speech(); instance.lang="ja-JP";instance.interimResults=false;instance.continuous=true;
+    instance.onresult=(event)=>{const latest=event.results[event.results.length-1]?.[0]?.transcript??"";setBrief(current=>`${current}${current?" ":""}${latest}`)};
+    instance.onend=()=>setListening(false);instance.onerror=()=>setListening(false);recognition.current=instance;instance.start();setListening(true);
+  }
+  function createMission(){if(!brief.trim())return;setMission(true)}
+  return <main className="app-shell">
+    <aside className="rail"><a className="mark" href="#top" aria-label="Guildless home">GL</a><div className="rail-nav">{["Command","Missions","Evidence","Agents"].map((item,index)=><button key={item} className={active===item?"selected":""} onClick={()=>setActive(item)} aria-label={item}><span>{["⌁","◫","◎","◇"][index]}</span><small>{item}</small></button>)}</div><a className="repo" href="https://github.com/kokoaru-ltd/guildless/archive/refs/heads/agent/cross-model-production-policy.zip" aria-label="Download source">↓</a></aside>
+    <section className="workspace" id="top"><header className="topbar"><div><b>GUILDLESS</b><span>/</span><strong>Operator console</strong></div><div className="runtime"><i/> LOCAL RUNTIME <span>CONTROLLED</span></div></header>
+      <div className="command-stage"><div className="eyebrow"><span>OWNER DIRECTIVE</span><em>MISSION 0001</em></div><h1>Describe the outcome.<br/><span>The company builds the rest.</span></h1><p className="lead">One instruction becomes researched, divided, independently reviewed work. No model approves its own output.</p>
+        <div className={`voice-composer ${listening?"is-listening":""}`}><textarea value={brief} onChange={event=>{setBrief(event.target.value);setMission(false)}} placeholder="例：iOS向けの3Dゲームを、企画・素材・実装・テスト・ストア公開まで作って。競合と評価済みOSSを先に調査して。" aria-label="Owner directive"/><div className="composer-bar"><button className="mic" onClick={toggleVoice} aria-pressed={listening}><i/>{listening?"Listening… tap to stop":"Speak directive"}</button><span>{chars?`${chars} characters`:"Japanese / English"}</span><button className="dispatch" disabled={!brief.trim()} onClick={createMission}>{mission?"Mission created":"Create verified mission"}<b>↗</b></button></div></div>
+        <div className={`workgraph ${mission?"has-mission":""}`}><div className="section-head"><div><small>SEPARATION OF DUTIES</small><h2>{mission?"Mission compiled. Research is ready to run.":"The work contract is created before execution."}</h2></div><span>{mission?"1 READY · 5 LOCKED":"AWAITING DIRECTIVE"}</span></div><div className="steps">{steps.map((step,index)=><div className={`step ${step[3]}`} key={step[1]}><b>{step[0]}</b><div><strong>{step[1]}</strong><small>{step[2]}</small></div><em>{step[3]}</em>{index<steps.length-1&&<i/>}</div>)}</div>{mission&&<div className="truth-note"><b>Execution has not started.</b> This console created the governed work graph only. External research and model calls require their configured credentials.</div>}</div>
+      </div></section>
+    <aside className="inspector"><header><div><small>COMPANY STATUS</small><strong>1 owner / 5 engines</strong></div><button aria-label="Settings">•••</button></header><section className="health"><div className="score"><strong>20</strong><span>%<small>execution ready</small></span></div><div className="bar"><i/></div><p>Planning policy is live. Autonomous workers and durable scheduling are not complete.</p></section><section className="engine-stack"><div className="aside-title"><small>CAPABILITY ROUTER</small><span>LIVE TRUTH</span></div>{roles.map(engine=><div className="engine" key={engine.name}><i className={engine.tone}/><div><b>{engine.name}</b><small>{engine.role}</small></div><em>{engine.state}</em></div>)}</section><section className="release"><div className="aside-title"><small>RELEASE AUTHORITY</small><span>0 / 4</span></div>{["Build reproduced","Tests pass","Independent review","Rollback verified"].map(item=><div key={item}><i/> {item}</div>)}<button disabled>Release locked</button></section><footer><div><b>Desktop source</b><small>Run on your machine. Bring your own model accounts.</small></div><a href="https://github.com/kokoaru-ltd/guildless/archive/refs/heads/agent/cross-model-production-policy.zip">Download ↓</a><a className="github" href="https://github.com/kokoaru-ltd/guildless">View GitHub ↗</a></footer></aside>
   </main>
 }

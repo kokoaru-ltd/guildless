@@ -6,8 +6,8 @@ const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "GUILDLESS — Evidence-driven production control plane",
-  description: "One owner directs a verifiable AI production company.",
+  title: "GUILDLESS — Operator Console",
+  description: "Direct a verifiable AI production company by voice or text.",
   icons: { icon: "/favicon.svg", shortcut: "/favicon.svg" },
 };
 
