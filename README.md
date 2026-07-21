@@ -1,6 +1,6 @@
 # GUILDLESS
 
-> **One person. Full studio.**  
+> **One person. Full studio.**<br>
 > One human directs. An AI production organization plans, builds, tests, ships, operates, and grows the product.
 
 GUILDLESS is an open development project for testing a hard claim:
