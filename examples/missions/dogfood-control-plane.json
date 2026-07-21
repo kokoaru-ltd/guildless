@@ -1,0 +1,25 @@
+{
+  "id": "dogfood-control-plane-m0",
+  "objective": "Implement Milestone 0 of GUILDLESS in this repository: a durable local event ledger, rebuildable mission projections, graph validation, and CLI commands, with independent tests and review evidence.",
+  "budget": {
+    "currency": "JPY",
+    "maximum": 3000
+  },
+  "policy": {
+    "excludedProviders": ["anthropic", "google"],
+    "maximumDelegationDepth": 2
+  },
+  "repository": {
+    "url": "https://github.com/kokoaru-ltd/guildless",
+    "localPath": "C:\\Users\\kyant\\OneDrive\\Documents\\さかな",
+    "branch": "agent/cross-model-production-policy"
+  },
+  "acceptance": [
+    "Mission state is reconstructed exclusively from an append-only event ledger",
+    "Duplicate idempotency keys cannot apply the same command twice",
+    "Graph cycles and missing dependencies are rejected",
+    "A forced process restart preserves the same projected mission state",
+    "Implementation, tests, review, and repair use separated sessions and providers",
+    "All existing orchestrator tests remain passing"
+  ]
+}

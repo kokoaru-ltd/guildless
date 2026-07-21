@@ -5,11 +5,12 @@ const localAppData = process.env.LOCALAPPDATA ?? "";
 const appData = process.env.APPDATA ?? "";
 const kimiNode = join(localAppData, "Programs", "kimi-desktop", "resources", "resources", "runtime", "node.exe");
 const kimiDaimon = join(appData, "kimi-desktop", "daimon-bundle", "bin", "kimi-daimon.cmd");
+const kimiConfig = join(appData, "kimi-desktop", "daimon-share", "daimon", "config.json");
 
 export const defaultEngines = [
   { id: "claude-engineer", provider: "anthropic", capabilities: ["architecture", "coding", "code-review", "security"], priority: 10, relativeCost: 8, enabled: true, execution: "headless" },
   { id: "codex-engineer", provider: "openai", capabilities: ["architecture", "coding", "testing", "code-review", "security"], priority: 20, relativeCost: 6, enabled: true, execution: "headless" },
-  { id: "kimi-operator", provider: "moonshot", capabilities: ["operations", "research", "testing", "code-review", "coding"], priority: 30, relativeCost: 2, enabled: existsSync(kimiNode) && existsSync(kimiDaimon), execution: "headless", supportsSwarm: true },
+  { id: "kimi-operator", provider: "moonshot", capabilities: ["operations", "research", "testing", "code-review", "security", "coding"], priority: 30, relativeCost: 2, enabled: existsSync(kimiNode) && existsSync(kimiDaimon) && existsSync(kimiConfig), execution: "headless", supportsSwarm: true },
   { id: "gemini-antigravity", provider: "google", capabilities: ["architecture", "coding", "testing", "code-review", "multimodal"], priority: 40, relativeCost: 3, enabled: process.platform === "win32", execution: "interactive" },
   { id: "node-verifier", provider: "local", capabilities: ["deterministic-verification"], priority: 1, relativeCost: 0, enabled: true, execution: "deterministic" },
 ];
@@ -24,7 +25,7 @@ export function engineCommand(engineId, prompt, workspace) {
   if (engineId === "kimi-operator") {
     return {
       command: kimiDaimon,
-      args: ["--node", kimiNode, "run", "--prompt", prompt],
+      args: ["--node", kimiNode, "run", "--config", kimiConfig, "--prompt", prompt],
       cwd: workspace,
       supportsSwarm: true,
     };
