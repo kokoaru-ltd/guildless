@@ -1,98 +1,59 @@
-# vinext-starter
+# GUILDLESS
 
-A clean full-stack starter running on
-[vinext](https://github.com/cloudflare/vinext), with optional Cloudflare D1 and
-Drizzle support.
+**One person. Full studio.**
 
-## Prerequisites
+GUILDLESS is an AI-native production operating system designed to let one human direct work that previously required a full software company or game studio.
 
-- Node.js `>=22.13.0`
+The operator defines goals, constraints, taste, budget, and release decisions. GUILDLESS plans the work, chooses the best available model for each task, runs specialized agents in parallel, verifies their output, and escalates only decisions that require human judgment.
 
-## Quick Start
+## Product thesis
+
+Models are replaceable engines. The durable product is the control plane around them:
+
+- persistent product memory and architectural decisions
+- dependency-aware planning across thousands of tasks
+- isolated parallel workspaces and safe integration
+- automated tests, reviews, playtests, and quality gates
+- cost-, latency-, and quality-aware model routing
+- human approval for destructive, expensive, or irreversible actions
+- continuous release, operations, and growth loops
+
+## Capability routing
+
+| Capability | Preferred engine today | Typical work |
+| --- | --- | --- |
+| Visual generation | GPT Image | concept art, UI, textures, marketing assets |
+| Engineering | Claude / Codex | architecture, implementation, refactoring, review |
+| Low-cost operations | Kimi | monitoring, triage, maintenance, research |
+| Multimodal context | Gemini | video understanding, large repositories, media workflows |
+| Motion generation | Seedance and available video engines | trailers, ads, cinematics, social clips |
+
+These defaults are policy, not hard-coded loyalty. Every engine is replaceable based on benchmark quality, availability, price, privacy, and task constraints.
+
+## Scope
+
+GUILDLESS targets complete production loops:
+
+1. Research and product strategy
+2. Specification and architecture
+3. Software or game implementation
+4. Visual, audio, and video asset production
+5. Automated testing and playtesting
+6. Infrastructure, release, and operations
+7. Store presence, campaigns, content, and analytics
+8. Continuous maintenance and improvement
+
+## Current status
+
+This repository contains the initial mission-control prototype and the first platform contracts. It does not yet claim autonomous production. Progress is measured by reproducible solo-production benchmarks, not demo output.
+
+## Local development
 
 ```bash
 npm install
 npm run dev
-npm run build
 ```
 
-This starter does not use `wrangler.jsonc`.
+## License
 
-## Included Shape
-
-- edit site code under `app/`
-- `.openai/hosting.json` declares optional Sites D1 and R2 bindings
-- `vite.config.ts` simulates declared bindings for local development
-- `db/schema.ts` starts intentionally empty
-- `examples/d1/` contains an optional D1 example surface
-- `drizzle.config.ts` supports local migration generation when needed
-
-## Workspace Auth Headers
-
-OpenAI workspace sites can read the current user's email from
-`oai-authenticated-user-email`.
-
-SIWC-authenticated workspace sites may also receive
-`oai-authenticated-user-full-name` when the user's SIWC profile has a non-empty
-`name` claim. The full-name value is percent-encoded UTF-8 and is accompanied by
-`oai-authenticated-user-full-name-encoding: percent-encoded-utf-8`.
-
-Treat the full name as optional and fall back to email when it is absent:
-
-```tsx
-import { headers } from "next/headers";
-
-export default async function Home() {
-  const requestHeaders = await headers();
-  const email = requestHeaders.get("oai-authenticated-user-email");
-  const encodedFullName = requestHeaders.get("oai-authenticated-user-full-name");
-  const fullName =
-    encodedFullName &&
-    requestHeaders.get("oai-authenticated-user-full-name-encoding") ===
-      "percent-encoded-utf-8"
-      ? decodeURIComponent(encodedFullName)
-      : null;
-
-  const displayName = fullName ?? email;
-  // ...
-}
-```
-
-## Optional Dispatch-Owned ChatGPT Sign-In
-
-Import the ready-to-use helpers from `app/chatgpt-auth.ts` when the site needs
-optional or required ChatGPT sign-in:
-
-- Use `getChatGPTUser()` for optional signed-in UI.
-- Use `requireChatGPTUser(returnTo)` for server-rendered pages that should send
-  anonymous visitors through Sign in with ChatGPT.
-- Use `chatGPTSignInPath(returnTo)` and `chatGPTSignOutPath(returnTo)` for
-  browser links or actions.
-- Pass a same-origin relative `returnTo` path for the destination after sign-in
-  or sign-out. The helper validates and safely encodes it.
-- Mark protected pages with `export const dynamic = "force-dynamic"` because
-  they depend on per-request identity headers.
-
-Dispatch owns `/signin-with-chatgpt`, `/signout-with-chatgpt`, `/callback`, the
-OAuth cookies, and identity header injection. Do not implement app routes for
-those reserved paths. Routes that do not import and call the helper remain
-anonymous-compatible.
-
-SIWC establishes identity only; it does not prove workspace membership. Use the
-Sites hosting platform's access policy controls for workspace-wide restrictions,
-or enforce explicit server-side membership or allowlist checks.
-
-Use SIWC for account pages, user-specific dashboards, saved records, and write
-actions tied to the current ChatGPT user. Leave public content anonymous.
-
-## Useful Commands
-
-- `npm run dev`: start local development
-- `npm run build`: verify the vinext build output
-- `npm test`: build the starter and verify its rendered loading skeleton
-- `npm run db:generate`: generate Drizzle migrations after schema changes
-
-## Learn More
-
-- [vinext Documentation](https://github.com/cloudflare/vinext)
-- [Drizzle D1 Guide](https://orm.drizzle.team/docs/get-started/d1-new)
+Proprietary during the initial research and product-validation phase.

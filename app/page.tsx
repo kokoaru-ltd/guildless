@@ -1,117 +1,94 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
-const agents = [
-  { id: "maker", name: "つくる係", mark: "作", color: "coral", skill: "Web・アプリ・ファイル", note: "考えるだけでなく、動くものまで仕上げます", engines: "Codex ほか" },
-  { id: "editor", name: "つたえる係", mark: "伝", color: "violet", skill: "資料・文章・デザイン", note: "あなたらしい表現を覚えて整えます", engines: "Fable ほか" },
-  { id: "researcher", name: "しらべる係", mark: "調", color: "blue", skill: "調査・比較・長い資料", note: "根拠を集め、判断できる形にまとめます", engines: "Kimi ほか" },
-  { id: "operator", name: "うごかす係", mark: "動", color: "green", skill: "メール・予定・定型業務", note: "許可をもらい、いつもの仕事を実行します", engines: "Gemini ほか" },
+const engines = [
+  { name: "GPT Image", role: "Visual Studio", task: "コンセプトアート・UI・ゲーム素材", color: "#ff735c", mark: "GI" },
+  { name: "Claude", role: "Engineering", task: "設計・実装・レビュー", color: "#db9b63", mark: "CL" },
+  { name: "Kimi", role: "Operations", task: "低コストな監視・保守・調査", color: "#5b8def", mark: "KI" },
+  { name: "Gemini", role: "Media Lab", task: "動画・音声・大規模コンテキスト", color: "#43aa82", mark: "GE" },
+  { name: "Seedance", role: "Motion Studio", task: "PV・広告・ゲーム映像", color: "#9a78e5", mark: "SE" },
 ];
 
-const jobs = [
-  { icon: "⌘", label: "Webサイトを作る", prompt: "商品の魅力が伝わるWebサイトを作って" },
-  { icon: "文", label: "資料をまとめる", prompt: "この資料を読んで要点をわかりやすくまとめて" },
-  { icon: "◎", label: "画像を読み取る", prompt: "画像の内容を読み取って改善案を出して" },
-  { icon: "✦", label: "アイデアを形にする", prompt: "新しいサービスのアイデアを企画にして" },
+const stages = [
+  { name: "企画・市場検証", owner: "Strategy", status: "done" },
+  { name: "世界観・仕様設計", owner: "Director", status: "done" },
+  { name: "ゲームプレイ実装", owner: "Engineering", status: "active" },
+  { name: "アセット制作", owner: "Visual Studio", status: "active" },
+  { name: "自動プレイテスト", owner: "QA", status: "queued" },
+  { name: "PV・ストア公開", owner: "Growth", status: "queued" },
 ];
-
-function pickAgent(text: string) {
-  const value = text.toLowerCase();
-  if (/コード|web|サイト|アプリ|修正|開発/.test(value)) return agents[0];
-  if (/スライド|資料を作|物語|文章|企画/.test(value)) return agents[1];
-  if (/調べ|検索|要約|長い|pdf|資料を読/.test(value)) return agents[2];
-  if (/画像|写真|google|表|動画/.test(value)) return agents[3];
-  return agents[1];
-}
 
 export default function Home() {
-  const [prompt, setPrompt] = useState("");
-  const [selected, setSelected] = useState<string | null>(null);
+  const [goal, setGoal] = useState("協力プレイ対応のローグライトゲームを、Steamで90日以内に公開する");
   const [running, setRunning] = useState(false);
-  const recommendation = useMemo(() => pickAgent(prompt), [prompt]);
-
-  function submit() {
-    if (!prompt.trim()) return;
-    setRunning(true);
-    setSelected(recommendation.id);
-    window.setTimeout(() => setRunning(false), 900);
-  }
 
   return (
-    <main>
-      <nav className="nav">
-        <a className="brand" href="#top" aria-label="さかなAI ホーム">
-          <span className="fish" aria-hidden="true">›<i>°</i>)))彡</span>
-          <span>さかな<span>AI</span></span>
-        </a>
-        <div className="nav-actions">
-          <button className="plain-button">使い方</button>
-          <button className="history-button"><span>↺</span> 履歴</button>
-          <button className="avatar" aria-label="アカウント">さ</button>
+    <main className="shell">
+      <aside className="sidebar">
+        <div className="logo"><span>G</span> GUILDLESS <small>alpha</small></div>
+        <nav>
+          <a className="active" href="#mission">⌘<span>Mission Control</span></a>
+          <a href="#roadmap">◇<span>Roadmap</span></a>
+          <a href="#studio">◫<span>AI Studio</span></a>
+          <a href="#builds">△<span>Builds</span></a>
+          <a href="#growth">↗<span>Growth</span></a>
+        </nav>
+        <div className="solo-card">
+          <span className="pulse" /> SOLO OPERATOR
+          <strong>1 human</strong>
+          <p>12 agents working</p>
         </div>
-      </nav>
+      </aside>
 
-      <section className="hero" id="top">
-        <div className="eyebrow"><span>✦</span> AIを選ばなくていい、新しい働き方</div>
-        <h1>やりたいことを、<br /><em>得意なAI</em>へ。</h1>
-        <p className="lead">ひとこと頼むだけ。さかなAIが、いちばん得意な<br className="desktop" />エージェントを選んで仕事を任せます。</p>
+      <section className="workspace" id="mission">
+        <header>
+          <div><span className="overline">PROJECT / NIGHTFALL</span><h1>Mission Control</h1></div>
+          <div className="top-stats"><span><small>MONTHLY BURN</small>¥38,420</span><span><small>TEAM SAVED</small>14.2人月</span><button>Ship build</button></div>
+        </header>
 
-        <div className="composer-wrap">
-          <div className="composer">
-            <textarea
-              value={prompt}
-              onChange={(event) => setPrompt(event.target.value)}
-              onKeyDown={(event) => {
-                if ((event.metaKey || event.ctrlKey) && event.key === "Enter") submit();
-              }}
-              placeholder="今日は、なにを手伝いましょう？"
-              aria-label="AIへの依頼"
-            />
-            <div className="composer-footer">
-              <div className="route-preview">
-                <span className={`mini-mark ${recommendation.color}`}>{recommendation.mark}</span>
-              <span>{prompt ? `${recommendation.name} が担当` : "費用0円の経路を優先"}</span>
-              </div>
-              <button className="send" onClick={submit} disabled={!prompt.trim() || running} aria-label="依頼を送る">{running ? "…" : "↑"}</button>
-            </div>
+        <section className="mission-card">
+          <div className="mission-copy">
+            <span className="tag">OWNER DIRECTIVE</span>
+            <h2>あなたが決める。<br /><em>AIスタジオが完成させる。</em></h2>
+            <p>ゲーム、SaaS、アプリ、映像、マーケティング。目標から公開・運用まで、専門エージェントが並列で進めます。</p>
           </div>
-          {selected && (
-            <div className="result-toast" role="status">
-              <span className={`mini-mark ${recommendation.color}`}>{recommendation.mark}</span>
-              <div><strong>{running ? "完了までの道筋を考えています…" : `${recommendation.name} が仕事を始めました`}</strong><small>{running ? "使う道具・費用・確認点を整理中" : recommendation.note}</small></div>
-              {!running && <span className="check">✓</span>}
+          <div className="directive-box">
+            <label htmlFor="goal">今回のゴール</label>
+            <textarea id="goal" value={goal} onChange={(e) => setGoal(e.target.value)} />
+            <div><span>予算上限 ¥100,000 / 月</span><button onClick={() => { setRunning(true); setTimeout(() => setRunning(false), 1200); }}>{running ? "組織を編成中…" : "開発を開始 →"}</button></div>
+          </div>
+        </section>
+
+        <div className="grid">
+          <section className="panel pipeline" id="roadmap">
+            <div className="panel-head"><div><span>LIVE EXECUTION</span><h3>90日リリース計画</h3></div><button>全体を見る</button></div>
+            <div className="progress"><i /><span>Day 18 / 90</span><b>21%</b></div>
+            <div className="stage-list">
+              {stages.map((stage, index) => <div className={`stage ${stage.status}`} key={stage.name}><span className="stage-no">{stage.status === "done" ? "✓" : index + 1}</span><div><strong>{stage.name}</strong><small>{stage.owner}</small></div><em>{stage.status === "active" ? "進行中" : stage.status === "done" ? "完了" : "待機"}</em></div>)}
             </div>
-          )}
-          <div className="privacy"><span>♢</span> 入力内容は学習に使いません</div>
-        </div>
+          </section>
 
-        <div className="quick-jobs">
-          {jobs.map((job) => (
-            <button key={job.label} onClick={() => setPrompt(job.prompt)}>
-              <span>{job.icon}</span>{job.label}
-            </button>
-          ))}
-        </div>
-      </section>
+          <section className="panel studio" id="studio">
+            <div className="panel-head"><div><span>BEST ENGINE FOR THE JOB</span><h3>AI Studio</h3></div><i className="live-dot" /></div>
+            <p className="panel-description">モデルに忠誠を持たない。品質・速度・費用から、タスクごとに最良のエンジンを使います。</p>
+            <div className="engine-list">
+              {engines.map((engine) => <div className="engine" key={engine.name}><span className="engine-mark" style={{ background: engine.color }}>{engine.mark}</span><div><strong>{engine.role}</strong><small>{engine.task}</small></div><em>{engine.name}</em></div>)}
+            </div>
+          </section>
 
-      <section className="agents-section">
-        <div className="section-heading">
-          <div><span className="kicker">YOUR AI CREW</span><h2>モデルではなく、仕事で選ぶ。</h2></div>
-          <p>裏側のAIが入れ替わっても大丈夫。<br />あなたの仕事の進め方は、ここに残ります。</p>
-        </div>
-        <div className="agent-grid">
-          {agents.map((agent) => (
-            <article className="agent-card" key={agent.id}>
-              <span className={`agent-mark ${agent.color}`}>{agent.mark}</span>
-              <div className="availability"><i /> 利用できます</div>
-              <h3>{agent.name}</h3>
-              <strong>{agent.skill}</strong>
-              <p>{agent.note}</p>
-              <span className="engine-label">現在の候補：{agent.engines}</span>
-              <button onClick={() => { setPrompt(`${agent.name}に、`); document.getElementById("top")?.scrollIntoView({ behavior: "smooth" }); }}>この係に頼む <span>→</span></button>
-            </article>
-          ))}
+          <section className="panel approvals">
+            <div className="panel-head"><div><span>ONLY YOU CAN DECIDE</span><h3>2件の承認待ち</h3></div></div>
+            <article><span className="risk">DESIGN</span><strong>戦闘テンポを15%速くする</strong><p>AIプレイテストでは継続率が8.4%改善。既存アニメーション42点を自動調整します。</p><div><button className="ghost">詳しく見る</button><button className="approve">承認</button></div></article>
+            <article><span className="risk money">COST</span><strong>PV動画の高品質レンダリング</strong><p>Seedanceによる30秒PV。追加費用見込み ¥1,840。</p><div><button className="ghost">却下</button><button className="approve">承認</button></div></article>
+          </section>
+
+          <section className="panel output" id="builds">
+            <div className="panel-head"><div><span>TODAY'S OUTPUT</span><h3>スタジオ稼働状況</h3></div><b>47 tasks</b></div>
+            <div className="metric-row"><div><strong>18</strong><span>実装</span></div><div><strong>142</strong><span>テスト</span></div><div><strong>36</strong><span>素材</span></div><div><strong>4</strong><span>施策</span></div></div>
+            <div className="activity"><span>06:42</span><p><b>QA Agent</b> ボス戦を10,000回シミュレーション</p><em>完了</em></div>
+            <div className="activity"><span>06:38</span><p><b>Growth Agent</b> SteamストアA/Bコピーを生成</p><em>実行中</em></div>
+          </section>
         </div>
       </section>
     </main>

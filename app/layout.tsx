@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "さかなAI — 得意なAIへ、ひとこと。",
-  description: "やりたいことを入力するだけ。さかなAIが得意なエージェントを選びます。",
+  title: "GUILDLESS — One person. Full studio.",
+  description: "1人を、開発・ゲーム制作・運用・マーケティングまで行うAIスタジオに。",
   icons: {
     icon: "/favicon.svg",
     shortcut: "/favicon.svg",
