@@ -265,6 +265,18 @@ Production validation:
 npm run build
 ```
 
+### iPhone mission-control prototype
+
+The Expo app visualizes one-person production: mission progress, model assignment, cross-provider review, approval gates, and accepted artifacts.
+
+```bash
+cd apps/mobile
+npm install
+npm start
+```
+
+Open the QR code with Expo Go on an iPhone connected to the same network. The prototype currently uses demonstration state; it is intentionally not presented as a live orchestrator client yet.
+
 ## Contributing
 
 The most valuable contributions are not additional agent personas. They are repeatable integrations and tests that reduce required human intervention:
