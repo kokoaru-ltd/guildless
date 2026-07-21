@@ -1,98 +1,267 @@
-# vinext-starter
+# GUILDLESS
 
-A clean full-stack starter running on
-[vinext](https://github.com/cloudflare/vinext), with optional Cloudflare D1 and
-Drizzle support.
+> **One person. Full studio.**<br>
+> One human directs. An AI production organization plans, builds, tests, ships, operates, and grows the product.
 
-## Prerequisites
+GUILDLESS is an open development project for testing a hard claim:
 
-- Node.js `>=22.13.0`
+> Can one capable person ship and operate software or a game that previously required a full development organization?
 
-## Quick Start
+This is not another multi-model chat UI and not a claim that current AI can autonomously create an AAA game. GUILDLESS is the control plane required to turn many imperfect, replaceable AI models into a persistent production organization with budgets, memory, verification, and human accountability.
+
+**日本語:** 1人のオーナーが目標・品質・予算・重要判断を担当し、AI組織が企画、実装、素材制作、テスト、リリース、保守、マーケティングを進めるための実証プロジェクトです。
+
+## The honest answer: is this possible?
+
+### Possible with current technology
+
+- One person shipping production SaaS, web, mobile, and internal products with dramatically less implementation labor
+- One person producing an indie or carefully scoped mid-size game using an existing engine
+- Parallel code, test, documentation, research, visual, video, and campaign production
+- Continuous maintenance where low-cost agents triage telemetry and prepare verified fixes
+- Human-controlled releases with automated builds, regression tests, budgets, and rollback
+
+### Not solved yet
+
+- A fully autonomous AAA/MMO production with no experienced human oversight
+- Months of reliable agent work without architectural drift or supervision
+- Consistently production-ready 3D characters, rigs, animation, level design, and game balance from prompts alone
+- Proving subjective quality—fun, taste, story, brand, and market fit—with deterministic tests
+- Giving agents unrestricted production access without unacceptable security risk
+
+The project succeeds only if it closes these gaps through reproducible builds and measurable benchmarks. A polished demo does not count.
+
+## Why now?
+
+Individual models already perform valuable pieces of a studio's work. The missing layer is organizational:
+
+- models forget decisions or lose context;
+- parallel agents conflict with each other;
+- generated work is often not verified;
+- token usage is optimized instead of completed-product cost;
+- destructive actions and releases need explicit authority;
+- creative assets must enter real editable pipelines, not end as disconnected images;
+- production must continue when a provider changes price, limits, or model availability.
+
+GUILDLESS treats models as replaceable engines and owns the durable production state around them.
+
+## What the operator does
+
+The single human is the founder, product owner, and creative director—not a ticket dispatcher.
+
+1. Define the outcome, audience, constraints, budget, and deadline.
+2. Establish taste through references and approve product-defining decisions.
+3. Review playable or usable builds instead of reading every generated line.
+4. Approve expensive, destructive, security-sensitive, and production actions.
+5. Decide whether real users justify the next milestone.
+
+Everything else should become delegable, observable, reversible, and testable.
+
+## Full production loop
+
+```mermaid
+flowchart LR
+    O["One operator"] --> M["Mission compiler"]
+    M --> G["Dependency graph"]
+    G --> R["Capability router"]
+    R --> W1["Engineering workers"]
+    R --> W2["Visual and media workers"]
+    R --> W3["Research and growth workers"]
+    W1 --> V["Independent review and verification"]
+    W2 --> V
+    W3 --> V
+    V -->|fail| G
+    V -->|pass| B["Playable / deployable build"]
+    B --> A{"Human approval required?"}
+    A -->|yes| O
+    A -->|no| D["Release"]
+    D --> T["Telemetry and market feedback"]
+    T --> M
+```
+
+## Capability routing
+
+The following are initial policies, not permanent vendor choices. Routing must eventually use measured quality, completion cost, latency, privacy, context requirements, and availability.
+
+| Studio capability | Candidate engines | Output—not just a response |
+| --- | --- | --- |
+| Architecture and implementation | Claude, Codex, strong coding models | reviewed commits, migrations, tests, builds |
+| Visual production | GPT Image and specialist image models | editable source, sprites, textures, UI, store assets |
+| Low-cost operations | Kimi and efficient open models | classified incidents, verified patches, runbooks |
+| Large-context and multimodal analysis | Gemini and comparable models | repository/media analysis, test evidence, decisions |
+| Motion and campaign media | Seedance and available video models | trailers, ads, cinematics, cut-down variants |
+| Marketing and growth | best model per channel and task | positioning, experiments, campaigns, measured results |
+
+Provider names never appear in mission logic. Each integration implements a capability contract so engines can be benchmarked and replaced.
+
+## Software production
+
+For a software mission, GUILDLESS must be able to:
+
+- turn an owner directive into specifications, architecture decisions, milestones, and acceptance tests;
+- create an explicit dependency graph instead of an unbounded chat plan;
+- give agents isolated branches/worktrees and least-privilege tools;
+- prevent two workers from silently changing the same contract;
+- run tests, static analysis, security checks, migrations, and preview deployments;
+- use an independent reviewer rather than allowing the author to approve its own output;
+- merge only verified artifacts and preserve provenance;
+- deploy behind an approval gate and automatically roll back failed releases;
+- convert production incidents and user feedback into repair missions.
+
+## Game production
+
+For a game mission, writing code is only one part of the work. A valid pipeline must cover:
+
+- game design documents, mechanics, progression, economy, narrative, and content graphs;
+- Unity, Unreal, or Godot projects with reproducible editor and headless builds;
+- source-controlled scenes, prefabs, materials, shaders, VFX, and data tables;
+- concept art through production-ready 2D/3D asset ingestion;
+- rigging, animation, audio, dialogue, localization, and platform constraints;
+- bot-driven playtests, deterministic simulations, save compatibility, and performance budgets;
+- playable daily builds—not screenshots or design documents;
+- Steam/store assets, trailers, community content, launch experiments, telemetry, and live operations.
+
+Generated assets only count when they are licensed, traceable, editable, integrated into the game, and validated in a real build.
+
+## Core architecture
+
+| Component | Responsibility |
+| --- | --- |
+| Mission compiler | Convert intent into milestones, tasks, dependencies, tests, and budgets |
+| Product memory | Preserve specifications, architecture decisions, taste, history, and provenance |
+| Studio scheduler | Lease ready work, manage concurrency, retries, deadlines, and spend |
+| Capability router | Select and fall back between model/tool providers |
+| Isolated workers | Execute with scoped repositories, engines, media tools, browsers, or cloud access |
+| Critics | Review artifacts independently of the producing worker |
+| Verification system | Run deterministic tests, builds, simulations, visual checks, and security gates |
+| Integrator | Merge compatible verified outputs and produce release candidates |
+| Approval gateway | Pause product-defining, expensive, destructive, or irreversible actions |
+| Operations loop | Turn telemetry, incidents, reviews, and campaign results into new missions |
+
+More detail: [`docs/architecture.md`](docs/architecture.md)
+
+## Safety and authority
+
+Autonomy without authority boundaries is a production incident waiting to happen.
+
+- Agents receive capabilities per task, not permanent administrator access.
+- Secrets stay outside prompts and artifacts.
+- Network, filesystem, cloud, publishing, and spending permissions are separate grants.
+- Destructive operations require a preview of the exact impact and human approval.
+- Production changes require evidence, a rollback plan, and audit history.
+- Monthly and per-task budgets are hard limits, not advisory UI.
+- Model output is untrusted until verified.
+
+## Proof, not promises
+
+The first serious benchmark is a **90-day solo production trial**.
+
+### Target
+
+One operator releases and operates either a production SaaS product or a commercial-quality game vertical slice.
+
+### Required evidence
+
+- at least 100,000 maintained source lines or an equivalent multi-asset game project;
+- reproducible daily builds for 30 consecutive days;
+- automated regression, security, and recovery checks;
+- at least 10 concurrent isolated workers without corrupting the main project;
+- recovery from intentionally injected build, dependency, migration, and provider failures;
+- less than one hour of mandatory operator intervention per day after stabilization;
+- an enforced compute budget with per-artifact cost reporting;
+- release, rollback, incident response, and post-release improvement from real telemetry.
+
+### Failure conditions
+
+The hypothesis is not validated if:
+
+- the operator spends most of the day repairing agent output;
+- output volume rises but releasable progress does not;
+- architectural consistency collapses as the repository grows;
+- manual asset cleanup recreates a conventional studio workload;
+- compute cost approaches the equivalent human team cost;
+- the system cannot safely survive model or provider replacement.
+
+## Delivery roadmap
+
+### Phase 0 — Control-plane prototype (current)
+
+- [x] Mission-control interface
+- [x] Provider-independent capability registry
+- [x] Mission, task, acceptance-test, and approval contracts
+- [x] Initial architecture and falsifiable benchmark
+- [ ] Persistent mission database and event log
+
+### Phase 1 — Verified software loop
+
+- [ ] Compile one mission into a dependency graph
+- [ ] Run multiple coding agents in isolated git worktrees
+- [ ] Execute tests and independent review
+- [ ] Merge only passing changes
+- [ ] Enforce budget and approval policy
+- [ ] Produce a deployable build and rollback evidence
+
+### Phase 2 — Production operations
+
+- [ ] Telemetry ingestion and incident classification
+- [ ] Low-cost maintenance routing
+- [ ] Automated repair PRs with evidence
+- [ ] Release, rollback, and audit history
+- [ ] Provider outage and fallback drills
+
+### Phase 3 — Game and media studio
+
+- [ ] Engine project adapter and headless build pipeline
+- [ ] Asset manifest, rights, provenance, and editable-source tracking
+- [ ] Image, 3D, audio, animation, and video production adapters
+- [ ] Bot playtesting and performance capture
+- [ ] Store page, trailer, campaign, and community workflow
+
+### Phase 4 — Solo-production benchmark
+
+- [ ] Run the public 90-day trial
+- [ ] Publish cost, intervention time, failures, and release evidence
+- [ ] Compare against a conventional project baseline
+- [ ] Decide honestly whether the core hypothesis passed
+
+## Repository status
+
+This repository is currently an **architecture and mission-control prototype**. It does not yet execute autonomous production and should not be represented as a finished agent platform.
+
+Implemented contracts live in:
+
+- [`core/model-registry.ts`](core/model-registry.ts)
+- [`core/production-contract.ts`](core/production-contract.ts)
+- [`docs/architecture.md`](docs/architecture.md)
+
+## Run locally
+
+Requirements: Node.js 22.13 or newer.
 
 ```bash
 npm install
 npm run dev
+```
+
+Production validation:
+
+```bash
 npm run build
 ```
 
-This starter does not use `wrangler.jsonc`.
+## Contributing
 
-## Included Shape
+The most valuable contributions are not additional agent personas. They are repeatable integrations and tests that reduce required human intervention:
 
-- edit site code under `app/`
-- `.openai/hosting.json` declares optional Sites D1 and R2 bindings
-- `vite.config.ts` simulates declared bindings for local development
-- `db/schema.ts` starts intentionally empty
-- `examples/d1/` contains an optional D1 example surface
-- `drizzle.config.ts` supports local migration generation when needed
+- isolated worker execution;
+- task dependency and conflict detection;
+- provider adapters with cost and quality telemetry;
+- deterministic software and game-engine verification;
+- asset provenance and editable-pipeline support;
+- adversarial security and recovery benchmarks.
 
-## Workspace Auth Headers
+Open an issue with a concrete failure mode, proposed acceptance test, and reproducible example.
 
-OpenAI workspace sites can read the current user's email from
-`oai-authenticated-user-email`.
+## License
 
-SIWC-authenticated workspace sites may also receive
-`oai-authenticated-user-full-name` when the user's SIWC profile has a non-empty
-`name` claim. The full-name value is percent-encoded UTF-8 and is accompanied by
-`oai-authenticated-user-full-name-encoding: percent-encoded-utf-8`.
-
-Treat the full name as optional and fall back to email when it is absent:
-
-```tsx
-import { headers } from "next/headers";
-
-export default async function Home() {
-  const requestHeaders = await headers();
-  const email = requestHeaders.get("oai-authenticated-user-email");
-  const encodedFullName = requestHeaders.get("oai-authenticated-user-full-name");
-  const fullName =
-    encodedFullName &&
-    requestHeaders.get("oai-authenticated-user-full-name-encoding") ===
-      "percent-encoded-utf-8"
-      ? decodeURIComponent(encodedFullName)
-      : null;
-
-  const displayName = fullName ?? email;
-  // ...
-}
-```
-
-## Optional Dispatch-Owned ChatGPT Sign-In
-
-Import the ready-to-use helpers from `app/chatgpt-auth.ts` when the site needs
-optional or required ChatGPT sign-in:
-
-- Use `getChatGPTUser()` for optional signed-in UI.
-- Use `requireChatGPTUser(returnTo)` for server-rendered pages that should send
-  anonymous visitors through Sign in with ChatGPT.
-- Use `chatGPTSignInPath(returnTo)` and `chatGPTSignOutPath(returnTo)` for
-  browser links or actions.
-- Pass a same-origin relative `returnTo` path for the destination after sign-in
-  or sign-out. The helper validates and safely encodes it.
-- Mark protected pages with `export const dynamic = "force-dynamic"` because
-  they depend on per-request identity headers.
-
-Dispatch owns `/signin-with-chatgpt`, `/signout-with-chatgpt`, `/callback`, the
-OAuth cookies, and identity header injection. Do not implement app routes for
-those reserved paths. Routes that do not import and call the helper remain
-anonymous-compatible.
-
-SIWC establishes identity only; it does not prove workspace membership. Use the
-Sites hosting platform's access policy controls for workspace-wide restrictions,
-or enforce explicit server-side membership or allowlist checks.
-
-Use SIWC for account pages, user-specific dashboards, saved records, and write
-actions tied to the current ChatGPT user. Leave public content anonymous.
-
-## Useful Commands
-
-- `npm run dev`: start local development
-- `npm run build`: verify the vinext build output
-- `npm test`: build the starter and verify its rendered loading skeleton
-- `npm run db:generate`: generate Drizzle migrations after schema changes
-
-## Learn More
-
-- [vinext Documentation](https://github.com/cloudflare/vinext)
-- [Drizzle D1 Guide](https://orm.drizzle.team/docs/get-started/d1-new)
+The source is visible for research and validation. A formal open-source license has not yet been selected; until then, normal copyright restrictions apply. Do not describe the repository as open source yet.
