@@ -140,6 +140,8 @@ Generated assets only count when they are licensed, traceable, editable, integra
 
 More detail: [`docs/architecture.md`](docs/architecture.md)
 
+Sakana Fugu baseline tracking: [`docs/fugu-baseline.md`](docs/fugu-baseline.md)
+
 ## Safety and authority
 
 Autonomy without authority boundaries is a production incident waiting to happen.
@@ -243,6 +245,7 @@ Generate the first cross-model production plan:
 
 ```bash
 npm run guildless -- plan examples/missions/first-vertical-slice.json
+npm run guildless -- engines
 ```
 
 The generated plan is rejected unless implementation, test authoring, review, and repair are separated across providers. Local builds and tests act as deterministic verifiers; model agreement alone can never release a product.

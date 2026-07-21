@@ -33,3 +33,15 @@ test("release remains blocked until deterministic evidence exists", () => {
   assert.throws(() => assertReleaseEvidence({ build: true, tests: true, independentReview: true, rollbackPlan: true, testExitCode: 1 }), /tests failed/);
   assert.equal(assertReleaseEvidence({ build: true, tests: true, independentReview: true, rollbackPlan: true, testExitCode: 0 }), true);
 });
+
+test("mission policy can exclude a provider completely", () => {
+  const providerDiverse = [...engines, { id: "kimi", provider: "moonshot", capabilities: ["architecture", "coding", "testing", "code-review", "security"], priority: 3, relativeCost: 1, enabled: true }];
+  const plan = compileMission({ objective: "Provider-restricted mission", policy: { excludedProviders: ["anthropic"] } }, providerDiverse);
+  assert.equal(plan.stages.some((stage) => stage.provider === "anthropic"), false);
+});
+
+test("interactive engines are visible but never scheduled for unattended work", () => {
+  const withInteractive = [...engines, { id: "ui", provider: "google", capabilities: ["coding", "testing", "code-review", "security"], priority: 0, relativeCost: 0, enabled: true, execution: "interactive" }];
+  const plan = compileMission({ objective: "Unattended mission" }, withInteractive);
+  assert.equal(plan.stages.some((stage) => stage.engineId === "ui"), false);
+});

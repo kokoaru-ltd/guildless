@@ -14,6 +14,7 @@ const roleCapabilities = {
 function chooseEngine(engines, capability, excludedProviders = new Set()) {
   const candidates = engines
     .filter((engine) => engine.enabled && engine.capabilities.includes(capability))
+    .filter((engine) => engine.execution !== "interactive")
     .filter((engine) => !excludedProviders.has(engine.provider))
     .sort((a, b) => a.priority - b.priority || a.relativeCost - b.relativeCost);
   if (!candidates.length) throw new Error(`No independent engine available for ${capability}`);
@@ -23,16 +24,18 @@ function chooseEngine(engines, capability, excludedProviders = new Set()) {
 export function compileMission(mission, engines) {
   if (!mission?.objective?.trim()) throw new Error("Mission objective is required");
 
-  const implementer = chooseEngine(engines, "coding");
+  const excludedProviders = new Set(mission.policy?.excludedProviders ?? []);
+  const eligibleEngines = engines.filter((engine) => !excludedProviders.has(engine.provider));
+  const implementer = chooseEngine(eligibleEngines, "coding");
   const independent = new Set([implementer.provider]);
   const selected = {
-    specifier: chooseEngine(engines, "architecture"),
-    "test-author": chooseEngine(engines, "testing", independent),
+    specifier: chooseEngine(eligibleEngines, "architecture"),
+    "test-author": chooseEngine(eligibleEngines, "testing", independent),
     implementer,
-    reviewer: chooseEngine(engines, "code-review", independent),
-    "security-reviewer": chooseEngine(engines, "security", independent),
-    fixer: chooseEngine(engines, "coding", independent),
-    verifier: chooseEngine(engines, "deterministic-verification"),
+    reviewer: chooseEngine(eligibleEngines, "code-review", independent),
+    "security-reviewer": chooseEngine(eligibleEngines, "security", independent),
+    fixer: chooseEngine(eligibleEngines, "coding", independent),
+    verifier: chooseEngine(eligibleEngines, "deterministic-verification"),
   };
 
   const assignments = Object.entries(selected).map(([role, engine]) => ({
@@ -63,6 +66,8 @@ export function compileMission(mission, engines) {
       crossProviderReview: "required",
       deterministicVerification: "required",
       productionApproval: "human",
+      excludedProviders: [...excludedProviders],
+      maximumDelegationDepth: mission.policy?.maximumDelegationDepth ?? 3,
     },
     stages: assignments.map((assignment) => ({
       ...assignment,
