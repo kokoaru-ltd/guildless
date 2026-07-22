@@ -42,6 +42,8 @@ next-env.d.ts
 /.wrangler/
 /outputs/
 /work/
+/.guildless/
+/tsconfig.tsbuildinfo
 
 # Expo local runtime artifacts
 /apps/mobile/.tunnel*.log

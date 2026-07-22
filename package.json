@@ -10,6 +10,8 @@
     "build": "vinext build",
     "start": "vinext start",
     "guildless": "node orchestrator/guildless.mjs",
+    "guildless:runtime": "node orchestrator/runtime.mjs",
+    "guildless:first-run": "node orchestrator/runtime.mjs run-once \"hello worldなCLIツールを作って\"",
     "test:orchestrator": "node --test tests/orchestrator.test.mjs",
     "test": "npm run build && node --test tests/*.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
