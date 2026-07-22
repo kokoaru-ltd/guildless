@@ -8,7 +8,7 @@ const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"]
 export const metadata: Metadata = {
   title: "GUILDLESS — Operator Console",
   description: "Direct a verifiable AI production company by voice or text.",
-  icons: { icon: "/favicon.svg", shortcut: "/favicon.svg" },
+  icons: { icon: "/guildless-icon.png", shortcut: "/guildless-icon.png", apple: "/guildless-icon.png" },
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
