@@ -1,41 +1,182 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
-type Locale="en"|"ja";
-type SpeechRecognitionLike={lang:string;interimResults:boolean;continuous:boolean;start():void;stop():void;onresult:((event:{results:ArrayLike<{0:{transcript:string}}>})=>void)|null;onend:(()=>void)|null;onerror:(()=>void)|null};
-declare global{interface Window{SpeechRecognition?:new()=>SpeechRecognitionLike;webkitSpeechRecognition?:new()=>SpeechRecognitionLike}}
+type Locale = "en" | "ja";
+type View = "Overview" | "Missions" | "Evidence" | "Agents";
 
-const copy={
- en:{command:"Command",missions:"Missions",evidence:"Evidence",agents:"Agents",recent:"Recent missions",owner:"Owner mode",runtime:"LOCAL RUNTIME",controlled:"CONTROLLED",headline:"Describe the outcome.",headline2:"The company builds the rest.",lead:"One instruction becomes researched, divided, and independently reviewed work. No model approves its own output.",placeholder:"Example: Build an iOS 3D game from research and assets through implementation, testing, and App Store release.",speak:"Speak directive",listening:"Listening… tap to stop",create:"Save mission preview",created:"Preview saved",contract:"The work contract is created before execution.",compiled:"Preview graph created. Execution has not started.",awaiting:"AWAITING DIRECTIVE",ready:"1 PLANNED · 5 LOCKED",notStarted:"Execution has not started.",truth:"This console created the governed work graph only. External research and model calls require configured credentials.",company:"COMPANY STATUS",release:"RELEASE AUTHORITY",download:"Download",viewGithub:"View GitHub ↗",language:"日本語"},
- ja:{command:"指示",missions:"ミッション",evidence:"証拠",agents:"AIエージェント",recent:"最近のミッション",owner:"オーナーモード",runtime:"ローカル実行環境",controlled:"制御中",headline:"成果を話してください。",headline2:"会社が残りを組み立てます。",lead:"一つの指示を調査・分業・独立レビュー可能な仕事へ変換します。自分の成果物を同じAIが承認することはありません。",placeholder:"例：iOS向け3Dゲームを、調査・素材・実装・テスト・App Store公開まで作って。",speak:"音声で指示",listening:"聞き取り中…停止する",create:"ミッションのプレビューを保存",created:"プレビュー保存済み",contract:"実行前に仕事の契約を作成します。",compiled:"プレビューグラフを作成しました。実行は開始していません。",awaiting:"指示待ち",ready:"1件計画済み・5件ロック",notStarted:"実行はまだ開始されていません。",truth:"この画面が作成したのは管理された仕事グラフだけです。外部調査とモデル実行には接続設定が必要です。",company:"会社の状態",release:"リリース権限",download:"ダウンロード",viewGithub:"GitHubを見る ↗",language:"English"}
+const labels = {
+  en: {
+    Overview: "Overview", Missions: "Missions", Evidence: "Evidence", Agents: "Agents",
+    recent: "RECENT MISSIONS", live: "LOCAL RUNTIME", owner: "Owner mode",
+    built: "Built by an AI company.", proof: "Every handoff is visible.",
+    lead: "A playable iOS-first arcade game planned by Kimi, built by Claude, rejected twice by Codex, corrected, tested, and approved.",
+    open: "Open mission", play: "Playable build", verified: "VERIFIED",
+    timeline: "Production timeline", artifacts: "Shipped artifacts", gate: "Release gate",
+  },
+  ja: {
+    Overview: "概要", Missions: "ミッション", Evidence: "証拠", Agents: "AIエージェント",
+    recent: "最近のミッション", live: "ローカル実行中", owner: "オーナーモード",
+    built: "AI企業が開発した。", proof: "全ての受け渡しを可視化。",
+    lead: "Kimiが企画し、Claudeが実装。Codexが2回却下し、修正・テストを経て承認した、実際に遊べるiOS向けゲームです。",
+    open: "ミッションを開く", play: "プレイ可能ビルド", verified: "検証済み",
+    timeline: "開発タイムライン", artifacts: "完成した成果物", gate: "リリース判定",
+  },
 };
-const engines=[{name:"Codex",role:"Architecture · integration",state:"unconfigured",tone:"gray"},{name:"Claude",role:"Implementation · review",state:"unverified",tone:"gray"},{name:"Kimi",role:"Operations · maintenance",state:"unverified",tone:"gray"},{name:"Grok",role:"X · GitHub scouting",state:"key required",tone:"gray"},{name:"Gemini",role:"Multimodal · video",state:"interactive only",tone:"blue"}];
-const work=[["01","Evidence scout","Grok + GitHub"],["02","Architecture contract","Codex"],["03","Independent test design","Kimi"],["04","Implementation","Claude"],["05","Adversarial review","Codex"],["06","Fix + deterministic verification","Claude + Node"]];
-type PreviewMission={id:string;name:string;status:"Preview";updated:string};
 
-export default function Home(){
- const[locale,setLocale]=useState<Locale>("en"),[brief,setBrief]=useState(""),[listening,setListening]=useState(false),[mission,setMission]=useState(false),[active,setActive]=useState("Command"),[collapsed,setCollapsed]=useState(false),[selectedMission,setSelectedMission]=useState(0),[missions,setMissions]=useState<PreviewMission[]>([]);const recognition=useRef<SpeechRecognitionLike|null>(null);const t=copy[locale];
- useEffect(()=>{const saved=localStorage.getItem("guildless.locale"),browser=navigator.language.startsWith("ja")?"ja":"en";setLocale(saved==="ja"||saved==="en"?saved:browser);setCollapsed(localStorage.getItem("guildless.sidebarCollapsed")==="true");setBrief(localStorage.getItem("guildless.commandDraft")??"");try{const parsed=JSON.parse(localStorage.getItem("guildless.previewMissions")??"[]");setMissions(Array.isArray(parsed)?parsed.filter(item=>item&&typeof item.id==="string"&&typeof item.name==="string"):[])}catch{setMissions([])}const view=new URL(location.href).searchParams.get("view");setActive(view&&["Command","Missions","Evidence","Agents"].includes(view)?view:"Command");const onPop=()=>{const next=new URL(location.href).searchParams.get("view");setActive(next&&["Command","Missions","Evidence","Agents"].includes(next)?next:"Command")};addEventListener("popstate",onPop);return()=>removeEventListener("popstate",onPop)},[]);
- useEffect(()=>{document.documentElement.lang=locale},[locale]);
- useEffect(()=>{localStorage.setItem("guildless.commandDraft",brief)},[brief]);
- useEffect(()=>()=>recognition.current?.stop(),[]);
- const setLanguage=(next:Locale)=>{recognition.current?.stop();setListening(false);setLocale(next);localStorage.setItem("guildless.locale",next)};
- const openView=(view:string)=>{recognition.current?.stop();setListening(false);if(view===active)return;setActive(view);const url=new URL(location.href);url.searchParams.set("view",view);history.pushState({},"",url)};
- const toggleSidebar=()=>setCollapsed(value=>{const next=!value;localStorage.setItem("guildless.sidebarCollapsed",String(next));return next});
- const createPreviewMission=()=>{if(!brief.trim())return;const next:PreviewMission={id:crypto.randomUUID(),name:brief.trim().slice(0,72),status:"Preview",updated:new Intl.DateTimeFormat(locale,{dateStyle:"medium",timeStyle:"short"}).format(new Date())};const all=[next,...missions];setMissions(all);setSelectedMission(0);setMission(true);localStorage.setItem("guildless.previewMissions",JSON.stringify(all))};
- const steps=useMemo(()=>work.map((step,index)=>[...step,mission&&index===0?"planned":"waiting"]),[mission]);
- const labels:Record<string,string>={Command:t.command,Missions:t.missions,Evidence:t.evidence,Agents:t.agents};
- function toggleVoice(){if(listening){recognition.current?.stop();setListening(false);return}const Speech=window.SpeechRecognition||window.webkitSpeechRecognition;if(!Speech){alert(locale==="ja"?"このブラウザでは音声入力を利用できません。ChromeまたはEdgeを使用してください。":"Voice input is unavailable. Use Chrome or Edge.");return}const instance=new Speech();instance.lang=locale==="ja"?"ja-JP":"en-US";instance.interimResults=false;instance.continuous=true;instance.onresult=event=>{const latest=event.results[event.results.length-1]?.[0]?.transcript??"";setBrief(current=>`${current}${current?" ":""}${latest}`)};instance.onend=()=>setListening(false);instance.onerror=()=>setListening(false);recognition.current=instance;instance.start();setListening(true)}
- const mainTitle=active==="Command"?[t.headline,t.headline2]:[labels[active],locale==="ja"?"すべての判断を追跡できます。":"Every decision stays traceable."];
- return <main className={`app-shell ${collapsed?"sidebar-collapsed":""}`}>
-  <aside className="rail"><header><a className="mark" href="#top" aria-label="Guildless home"><img src="/guildless-icon.png" alt=""/></a><b>Guildless</b><button className="collapse" onClick={toggleSidebar} aria-label={collapsed?"Expand sidebar":"Collapse sidebar"}>{collapsed?"›":"‹"}</button></header><div className="rail-nav">{["Command","Missions","Evidence","Agents"].map((item,index)=><button key={item} className={active===item?"selected":""} onClick={()=>openView(item)} aria-current={active===item?"page":undefined}><span>{["＋","▣","◎","◇"][index]}</span><small>{labels[item]}</small></button>)}</div><section className="recents"><strong>{t.recent} · PREVIEW</strong>{missions.length?missions.slice(0,5).map((item,index)=><button key={item.id} className={selectedMission===index?"current":""} onClick={()=>{setSelectedMission(index);openView("Missions")}}><i/>{item.name}</button>):<small className="no-recents">{locale==="ja"?"まだありません":"None yet"}</small>}</section><footer className="rail-footer"><a className="repo" href="https://github.com/kokoaru-ltd/guildless/archive/refs/heads/agent/cross-model-production-policy.zip">↓</a><div><b>Browser preview</b><small>{t.owner}</small></div></footer></aside>
-  <section className="workspace" id="top"><header className="topbar"><div><b>GUILDLESS</b><span>/</span><strong>{labels[active]}</strong></div><div className="top-actions"><button className="language" onClick={()=>setLanguage(locale==="en"?"ja":"en")}>{t.language}</button><div className="runtime preview"><i/>BROWSER PREVIEW<span>NO EXECUTION</span></div></div></header><div className="preview-banner">{locale==="ja"?"ブラウザ操作プレビュー — ローカル下書き保存のみ。AI実行・永続制御・証拠収集・接続確認は行いません。":"Browser interaction preview — local draft storage only. No AI execution, durable control plane, evidence collection, or verified agent connection."}</div><div className="command-stage"><div className="eyebrow"><span>{labels[active].toUpperCase()}</span><em>PREVIEW</em></div><h1>{mainTitle[0]}<br/><span>{mainTitle[1]}</span></h1><p className="lead">{t.lead}</p>
-   {active==="Command"&&<><div className={`voice-composer ${listening?"is-listening":""}`}><textarea value={brief} onChange={e=>{setBrief(e.target.value);setMission(false)}} placeholder={t.placeholder} aria-label="Owner directive"/><div className="composer-bar"><button className="mic" onClick={toggleVoice} aria-pressed={listening}><i/>{listening?t.listening:t.speak}</button><span>{brief.trim().length?`${brief.trim().length} characters`:locale==="ja"?"日本語 / English":"English / 日本語"}</span><button className="dispatch" disabled={!brief.trim()} onClick={createPreviewMission}>{mission?(locale==="ja"?"プレビュー保存済み":"Preview saved"):t.create}<b>↗</b></button></div></div><div className="workgraph"><div className="section-head"><div><small>SEPARATION OF DUTIES · PREVIEW</small><h2>{mission?t.compiled:t.contract}</h2></div><span>{mission?t.ready:t.awaiting}</span></div><div className="steps">{steps.map(step=><div className={`step ${step[3]}`} key={step[1]}><b>{step[0]}</b><div><strong>{step[1]}</strong><small>{step[2]}</small></div><em>{step[3]}</em></div>)}</div>{mission&&<div className="truth-note"><b>{t.notStarted}</b> {t.truth}</div>}</div></>}
-   {active==="Missions"&&<section className="tab-view missions-view">{missions.length?<><div className="list-card">{missions.map((row,index)=><button key={row.id} onClick={()=>setSelectedMission(index)} className={selectedMission===index?"active":""}><span><b>{row.name}</b><small>{row.updated}</small></span><em>{row.status}</em></button>)}</div><div className="detail-card"><small>PREVIEW MISSION</small><h2>{missions[selectedMission]?.name}</h2><p>{t.notStarted} {t.truth}</p><dl><div><dt>Status</dt><dd>Preview</dd></div><div><dt>Authority</dt><dd>None</dd></div><div><dt>Release</dt><dd>Unavailable</dd></div></dl></div></>:<div className="empty-state"><h2>{locale==="ja"?"ミッションはまだありません":"No missions yet"}</h2><p>{locale==="ja"?"指示画面から最初のプレビューを作成してください。":"Create the first browser preview from Command."}</p><button onClick={()=>openView("Command")}>{locale==="ja"?"指示へ":"Go to Command"}</button></div>}</section>}
-   {active==="Evidence"&&<section className="tab-view"><div className="empty-state"><b>◎</b><h2>{locale==="ja"?"証拠パックはまだありません":"No Evidence Pack yet"}</h2><p>{locale==="ja"?"GitHub・X・実製品から、ライセンスと再現性を確認した証拠だけを保存します。":"Only licensed, reproducible evidence from GitHub, X, and shipped products will appear here."}</p><button onClick={()=>openView("Command")}>{locale==="ja"?"指示を作成":"Create a directive"}</button></div></section>}
-   {active==="Agents"&&<section className="tab-view agent-cards">{engines.map(engine=><article key={engine.name}><i className={engine.tone}/><div><h2>{engine.name}</h2><p>{engine.role}</p></div><em>{engine.state}</em></article>)}</section>}
-  </div></section>
-  <aside className="inspector"><header><div><small>{t.company}</small><strong>0 connected engines</strong></div><button>•••</button></header><section className="health"><div className="score text-score"><strong>PREVIEW</strong><span><small>browser only</small></span></div><div className="bar"><i style={{width:0}}/></div><p>{locale==="ja"?"この画面では外部AIを実行しません。ローカルランタイム接続後にのみ実行できます。":"This page cannot execute external AI. Execution requires a verified local runtime."}</p></section><section className="engine-stack"><div className="aside-title"><small>SUPPORTED ENGINES</small><span>NOT HEALTH-CHECKED</span></div>{engines.map(engine=><div className="engine" key={engine.name}><i className={engine.tone}/><div><b>{engine.name}</b><small>{engine.role}</small></div><em>{engine.state}</em></div>)}</section><section className="release"><div className="aside-title"><small>{t.release}</small><span>0 / 4</span></div>{["Build reproduced","Tests pass","Independent review","Rollback verified"].map(item=><div key={item}><i/>{item}</div>)}<button disabled>Release locked</button></section><footer><div><b>Source code</b><small>Not a desktop installer. Run locally with your own model accounts.</small></div><a href="https://github.com/kokoaru-ltd/guildless/archive/refs/heads/agent/cross-model-production-policy.zip">{locale==="ja"?"ソースをダウンロード":"Download source"} ↓</a><a className="github" href="https://github.com/kokoaru-ltd/guildless">{t.viewGithub}</a></footer></aside>
- </main>
+const agents = [
+  { name: "Kimi", glyph: "K", role: "Game design & live-ops", status: "COMPLETE", color: "#c7a7ff" },
+  { name: "Claude", glyph: "C", role: "React Native implementation", status: "COMPLETE", color: "#e9a477" },
+  { name: "Codex", glyph: "⌘", role: "Independent adversarial review", status: "PASS", color: "#8eb7ff" },
+  { name: "Node", glyph: "N", role: "Deterministic verification", status: "34 / 34", color: "#8bcf9b" },
+  { name: "Grok", glyph: "X", role: "Research connector", status: "NOT CONNECTED", color: "#727780" },
+];
+
+const events = [
+  { time: "13:44", actor: "Kimi", title: "Product contract approved", detail: "60-second loop, combo, health, difficulty curve, and failure modes.", result: "SPEC" },
+  { time: "13:56", actor: "Claude", title: "Playable Expo build produced", detail: "Touch controls, haptics, pause/resume, game-over, and deterministic rules.", result: "BUILD" },
+  { time: "13:59", actor: "Codex", title: "Review rejected", detail: "Timer drift and unsafe spawn geometry found. Release remained locked.", result: "FAIL", fail: true },
+  { time: "14:06", actor: "Claude", title: "Corrective patch completed", detail: "Wall-clock separated from physics; adversarial spawn tests added.", result: "FIX" },
+  { time: "14:08", actor: "Codex", title: "Second review rejected", detail: "One timer edge case and visual collision mismatch remained.", result: "FAIL", fail: true },
+  { time: "14:09", actor: "Codex", title: "Independent gate passed", detail: "All review findings closed. 34 tests and TypeScript validation passed.", result: "PASS", pass: true },
+];
+
+function GamePreview() {
+  return <div className="device-wrap">
+    <div className="device">
+      <div className="island" />
+      <div className="game">
+        <div className="game-hud">
+          <div><span className="hearts">♥ ♥ ♥</span><b>×4</b></div>
+          <strong>42</strong>
+          <div className="score"><small>SCORE</small><b>380</b></div>
+        </div>
+        <div className="time-line"><i /></div>
+        <div className="arena">
+          <i className="shard s1" /><i className="shard s2" /><i className="shard s3" />
+          <i className="mine m1"><b /></i><i className="mine m2"><b /></i><i className="mine m3"><b /></i>
+          <i className="orbit" /><i className="player"><b /></i>
+        </div>
+        <div className="game-caption"><small>NEON DRIFT</small><span>60 SECOND RUN</span></div>
+      </div>
+    </div>
+  </div>;
+}
+
+export default function Home() {
+  const [locale, setLocale] = useState<Locale>("en");
+  const [view, setView] = useState<View>("Overview");
+  const [collapsed, setCollapsed] = useState(false);
+  const t = labels[locale];
+
+  useEffect(() => {
+    const saved = localStorage.getItem("guildless.locale");
+    if (saved === "ja" || saved === "en") setLocale(saved);
+  }, []);
+
+  const changeLocale = () => {
+    const next = locale === "en" ? "ja" : "en";
+    setLocale(next);
+    localStorage.setItem("guildless.locale", next);
+  };
+
+  return <main className={`control-shell ${collapsed ? "is-collapsed" : ""}`}>
+    <aside className="control-rail">
+      <header>
+        <div className="brand-mark">GL</div>
+        <b>GUILDLESS</b>
+        <button onClick={() => setCollapsed(!collapsed)} aria-label="Toggle sidebar">‹</button>
+      </header>
+      <nav>
+        {(["Overview", "Missions", "Evidence", "Agents"] as View[]).map((item, index) =>
+          <button key={item} className={view === item ? "active" : ""} onClick={() => setView(item)}>
+            <i>{["⌂", "◫", "✓", "◇"][index]}</i><span>{t[item]}</span>
+          </button>)}
+      </nav>
+      <section className="rail-recents">
+        <small>{t.recent}</small>
+        <button className="selected" onClick={() => setView("Overview")}><i /><span><b>NEON DRIFT</b><em>iOS game · completed</em></span></button>
+        <button><i /><span><b>Hello CLI</b><em>Node · completed</em></span></button>
+      </section>
+      <footer><span>KK</span><div><b>kokoaru-ltd</b><small>{t.owner}</small></div></footer>
+    </aside>
+
+    <section className="control-main">
+      <header className="control-topbar">
+        <div><b>GUILDLESS</b><span>/</span><strong>{t[view]}</strong></div>
+        <div><button onClick={changeLocale}>{locale === "en" ? "日本語" : "English"}</button><span className="runtime-dot"><i />{t.live}</span></div>
+      </header>
+
+      {view === "Overview" && <div className="mission-page">
+        <section className="mission-hero">
+          <div className="hero-copy">
+            <div className="mission-state"><i /> MISSION COMPLETE <span>IOS-002</span></div>
+            <h1>{t.built}<br/><span>{t.proof}</span></h1>
+            <p>{t.lead}</p>
+            <div className="hero-actions">
+              <button onClick={() => setView("Evidence")}>{t.open} <b>→</b></button>
+              <span><i /> {t.play}</span>
+            </div>
+            <dl className="hero-metrics">
+              <div><dt>34 / 34</dt><dd>RULE TESTS</dd></div>
+              <div><dt>2×</dt><dd>REVIEW REJECTIONS</dd></div>
+              <div><dt>PASS</dt><dd>FINAL GATE</dd></div>
+              <div><dt>35f1f0d</dt><dd>GIT COMMIT</dd></div>
+            </dl>
+          </div>
+          <GamePreview />
+        </section>
+        <Pipeline locale={locale} />
+      </div>}
+
+      {view === "Missions" && <div className="section-page">
+        <div className="section-title"><small>PRODUCTION PORTFOLIO</small><h1>2 missions shipped.</h1><p>The system records who built, who reviewed, and why the release was allowed.</p></div>
+        <div className="mission-grid">
+          <article className="mission-card feature" onClick={() => setView("Overview")}><div><span>IOS-002 · COMPLETED</span><h2>NEON DRIFT</h2><p>Playable 60-second arcade game for Expo and iOS.</p></div><strong>PASS</strong></article>
+          <article className="mission-card"><div><span>CLI-001 · COMPLETED</span><h2>Hello CLI</h2><p>First autonomous Claude → Codex verified mission.</p></div><strong>PASS</strong></article>
+        </div>
+      </div>}
+
+      {view === "Evidence" && <div className="section-page evidence-page">
+        <div className="section-title"><small>IMMUTABLE PRODUCTION RECORD</small><h1>{t.timeline}</h1><p>Claims are tied to model output, review decisions, deterministic tests, and source artifacts.</p></div>
+        <div className="evidence-layout">
+          <div className="event-stream">{events.map((event, index) =>
+            <article className={event.fail ? "failed" : event.pass ? "passed" : ""} key={event.time + event.actor}>
+              <time>{event.time}</time><div className="event-node">{index + 1}</div>
+              <div><header><span>{event.actor}</span><em>{event.result}</em></header><h3>{event.title}</h3><p>{event.detail}</p></div>
+            </article>)}</div>
+          <aside className="artifact-panel"><small>{t.artifacts}</small>
+            <h2>NEON DRIFT</h2>
+            {[["App.tsx","Playable application"],["gameRules.js","Deterministic rules"],["gameRules.test.mjs","34 passing tests"],["Expo bundle","iOS-compatible output"]].map(x=><div key={x[0]}><i>✓</i><span><b>{x[0]}</b><small>{x[1]}</small></span></div>)}
+            <a href="https://github.com/kokoaru-ltd/guildless/tree/agent/cross-model-production-policy/apps/mobile">View source on GitHub →</a>
+          </aside>
+        </div>
+      </div>}
+
+      {view === "Agents" && <div className="section-page">
+        <div className="section-title"><small>MODEL ROUTING</small><h1>Specialists, not a model picker.</h1><p>Each model gets a bounded role. An implementer cannot approve its own output.</p></div>
+        <div className="agent-grid">{agents.map(agent=><article key={agent.name}>
+          <i style={{background: agent.color}}>{agent.glyph}</i><div><small>{agent.status}</small><h2>{agent.name}</h2><p>{agent.role}</p></div>
+        </article>)}</div>
+      </div>}
+    </section>
+
+    <aside className="control-inspector">
+      <header><small>{t.gate}</small><strong>{t.verified}</strong></header>
+      <div className="release-score"><b>100</b><span>/ 100</span><div><i /></div><p>Independent review closed every blocker before release.</p></div>
+      <section><small>RELEASE CHECKS</small>{["Build reproduced","34 tests pass","TypeScript clean","Codex review: PASS"].map(item=><div className="check" key={item}><i>✓</i>{item}</div>)}</section>
+      <section><small>ACTIVE CREW</small>{agents.slice(0,4).map(agent=><div className="mini-agent" key={agent.name}><i style={{background:agent.color}}>{agent.glyph}</i><span><b>{agent.name}</b><em>{agent.status}</em></span></div>)}</section>
+      <footer><small>DOWNLOADABLE SOURCE</small><p>Expo project ready for iPhone testing. App Store signing requires Apple credentials.</p><a href="https://github.com/kokoaru-ltd/guildless/archive/refs/heads/agent/cross-model-production-policy.zip">Download project ↓</a></footer>
+    </aside>
+  </main>;
+}
+
+function Pipeline({ locale }: { locale: Locale }) {
+  const t = labels[locale];
+  return <section className="pipeline-section">
+    <div className="pipeline-title"><div><small>AUTONOMOUS PRODUCTION</small><h2>{t.timeline}</h2></div><span>6 HANDOFFS · 0 SELF-APPROVALS</span></div>
+    <div className="pipeline">{events.map((event, index)=><article className={event.fail?"failed":event.pass?"passed":""} key={event.time}>
+      <header><i>{index+1}</i><span>{event.actor}</span><em>{event.result}</em></header><h3>{event.title}</h3><p>{event.detail}</p>
+    </article>)}</div>
+  </section>;
 }
