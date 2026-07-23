@@ -1,260 +1,798 @@
 import { StatusBar } from 'expo-status-bar';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  AppState,
+  GestureResponderEvent,
+  LayoutChangeEvent,
   Platform,
   Pressable,
   SafeAreaView,
-  ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
+import type { Bounds, MineBody, RunState, ShardBody, Vec2 } from './gameRules';
+import {
+  GAME_DURATION_MS,
+  MAX_HEALTH,
+  MINE_RADIUS,
+  PLAYER_RADIUS,
+  SHARD_RADIUS,
+  SHARD_TARGET_COUNT,
+  clampDelta,
+  clampElapsedDelta,
+  clampToBounds,
+  circlesOverlap,
+  collectShard,
+  comboWindowFraction,
+  createRunState,
+  hitMine,
+  isComboActive,
+  isGameOver,
+  isInvulnerable,
+  mineCountForElapsed,
+  secondsLeft,
+  spawnMine,
+  spawnShard,
+  stepMine,
+  stepPlayer,
+  timeLeftMs,
+} from './gameRules';
 
-type Brief = { goal: string; deadline: string; budget: string };
+// The orb rides slightly above the fingertip so the thumb never hides it.
+const THUMB_OFFSET = 48;
 
-const suggestedGoals = [
-  'Ship an iOS game',
-  'Launch a SaaS',
-  'Build a marketplace',
-];
+type Phase = 'menu' | 'playing' | 'paused' | 'over';
 
-const crew = [
-  ['ARCHITECT', 'Codex', 'Scope, system design, acceptance tests', '#A9C7FF'],
-  ['BUILDER', 'Claude', 'Production implementation', '#E9A879'],
-  ['VERIFIER', 'Gemini', 'Independent review and visual QA', '#82D9B1'],
-  ['OPERATOR', 'Kimi', 'Monitoring, triage, maintenance', '#B6A4FF'],
-];
+type World = {
+  run: RunState;
+  player: Vec2;
+  target: Vec2;
+  mines: Array<MineBody & { id: number }>;
+  shards: Array<ShardBody & { id: number }>;
+  nextId: number;
+  touching: boolean;
+  endReason: 'time' | 'down' | null;
+  newBest: boolean;
+};
+
+function buzz(trigger: () => Promise<unknown>) {
+  // Haptics are best-effort; never let an unsupported platform crash the loop.
+  try {
+    trigger().catch(() => {});
+  } catch {
+    // no-op
+  }
+}
 
 export default function App() {
-  const [goal, setGoal] = useState('');
-  const [step, setStep] = useState<1 | 2 | 3>(1);
-  const [brief, setBrief] = useState<Brief>({ goal: '', deadline: '30 days', budget: '$500' });
+  const [phase, setPhase] = useState<Phase>('menu');
+  const [, setFrame] = useState(0);
 
-  const next = async () => {
-    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    if (step === 1 && goal.trim()) {
-      setBrief((current) => ({ ...current, goal: goal.trim() }));
-      setStep(2);
-    } else if (step === 2) {
-      setStep(3);
+  const phaseRef = useRef<Phase>('menu');
+  const worldRef = useRef<World | null>(null);
+  const boundsRef = useRef<Bounds>({ width: 0, height: 0 });
+  const bestRef = useRef(0);
+  const rafRef = useRef<number | null>(null);
+  const lastTsRef = useRef<number | null>(null);
+
+  const startRun = useCallback(() => {
+    const bounds = boundsRef.current;
+    if (bounds.width <= 0 || bounds.height <= 0) return;
+    const player = { x: bounds.width / 2, y: bounds.height * 0.7 };
+    const world: World = {
+      run: createRunState(),
+      player,
+      target: { ...player },
+      mines: [],
+      shards: [],
+      nextId: 1,
+      touching: false,
+      endReason: null,
+      newBest: false,
+    };
+    for (let i = 0; i < mineCountForElapsed(0); i += 1) {
+      world.mines.push({ ...spawnMine(Math.random, bounds, 0, player), id: world.nextId++ });
     }
-  };
+    for (let i = 0; i < SHARD_TARGET_COUNT; i += 1) {
+      world.shards.push({ ...spawnShard(Math.random, bounds, player), id: world.nextId++ });
+    }
+    worldRef.current = world;
+    buzz(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium));
+    setPhase('playing');
+  }, []);
 
-  if (step === 3) return <CommandCenter brief={brief} onReset={() => setStep(1)} />;
+  // The gameplay clock (timer, combo/invuln windows, difficulty ramp) advances
+  // by wall-clock time; physics motion advances by the clamped delta so slow
+  // frames never tunnel bodies through walls.
+  const stepWorld = useCallback((physicsDtMs: number, elapsedDtMs: number) => {
+    const world = worldRef.current;
+    if (!world || world.endReason) return;
+    const bounds = boundsRef.current;
+
+    let run: RunState = { ...world.run, elapsedMs: world.run.elapsedMs + elapsedDtMs };
+    const now = run.elapsedMs;
+
+    world.player = stepPlayer(world.player, world.target, physicsDtMs);
+    world.mines = world.mines.map((mine) => stepMine(mine, physicsDtMs, bounds));
+
+    const wantMines = mineCountForElapsed(now);
+    while (world.mines.length < wantMines) {
+      world.mines.push({
+        ...spawnMine(Math.random, bounds, now, world.player),
+        id: world.nextId++,
+      });
+    }
+
+    const kept: World['shards'] = [];
+    for (const shard of world.shards) {
+      if (circlesOverlap(world.player.x, world.player.y, PLAYER_RADIUS, shard.x, shard.y, shard.r)) {
+        ({ run } = collectShard(run, now));
+        buzz(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light));
+      } else {
+        kept.push(shard);
+      }
+    }
+    world.shards = kept;
+    while (world.shards.length < SHARD_TARGET_COUNT) {
+      world.shards.push({ ...spawnShard(Math.random, bounds, world.player), id: world.nextId++ });
+    }
+
+    if (!isInvulnerable(run, now)) {
+      for (const mine of world.mines) {
+        if (circlesOverlap(world.player.x, world.player.y, PLAYER_RADIUS, mine.x, mine.y, mine.r)) {
+          const hit = hitMine(run, now);
+          run = hit.run;
+          if (hit.tookDamage) {
+            buzz(() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error));
+          }
+          break;
+        }
+      }
+    }
+
+    world.run = run;
+
+    if (isGameOver(run)) {
+      world.endReason = run.health <= 0 ? 'down' : 'time';
+      world.newBest = run.score > bestRef.current && run.score > 0;
+      bestRef.current = Math.max(bestRef.current, run.score);
+      buzz(() =>
+        world.newBest
+          ? Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
+          : Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning),
+      );
+      setPhase('over');
+    }
+  }, []);
+
+  const frame = useCallback(
+    (ts: number) => {
+      // lastTsRef is reset to null whenever the loop (re)starts, so the first
+      // frame after start or resume contributes zero time — no resume spikes.
+      const rawDt = lastTsRef.current == null ? 0 : ts - lastTsRef.current;
+      lastTsRef.current = ts;
+      stepWorld(clampDelta(rawDt), clampElapsedDelta(rawDt));
+      setFrame((f) => f + 1);
+      if (phaseRef.current === 'playing') {
+        rafRef.current = requestAnimationFrame(frame);
+      }
+    },
+    [stepWorld],
+  );
+
+  useEffect(() => {
+    phaseRef.current = phase;
+    if (phase !== 'playing') return undefined;
+    lastTsRef.current = null;
+    rafRef.current = requestAnimationFrame(frame);
+    return () => {
+      if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    };
+  }, [phase, frame]);
+
+  // Backgrounding the app must never cost the player a run.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next !== 'active' && phaseRef.current === 'playing') {
+        setPhase('paused');
+      }
+    });
+    return () => sub.remove();
+  }, []);
+
+  const onArenaLayout = useCallback((event: LayoutChangeEvent) => {
+    const { width, height } = event.nativeEvent.layout;
+    boundsRef.current = { width, height };
+  }, []);
+
+  const onTouch = useCallback((event: GestureResponderEvent) => {
+    const world = worldRef.current;
+    if (!world) return;
+    const { locationX, locationY } = event.nativeEvent;
+    world.touching = true;
+    world.target = clampToBounds(locationX, locationY - THUMB_OFFSET, PLAYER_RADIUS, boundsRef.current);
+  }, []);
+
+  const onTouchEnd = useCallback(() => {
+    const world = worldRef.current;
+    if (world) world.touching = false;
+  }, []);
+
+  const pauseRun = useCallback(() => {
+    buzz(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light));
+    setPhase('paused');
+  }, []);
+
+  const resumeRun = useCallback(() => {
+    buzz(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light));
+    setPhase('playing');
+  }, []);
+
+  const quitToMenu = useCallback(() => {
+    worldRef.current = null;
+    setPhase('menu');
+  }, []);
+
+  const world = worldRef.current;
+  const run = world?.run ?? null;
+  const now = run?.elapsedMs ?? 0;
+  const seconds = run ? secondsLeft(now) : 60;
+  const urgent = phase === 'playing' && seconds <= 10;
+  const comboOn = run != null && isComboActive(run, now) && run.combo > 1;
+  const invulnerable = run != null && isInvulnerable(run, now);
+  const playerVisible = !invulnerable || Math.floor(now / 100) % 2 === 0;
+  const timeFraction = run ? timeLeftMs(now) / GAME_DURATION_MS : 1;
 
   return (
     <View style={styles.root}>
       <StatusBar style="light" />
-      <LinearGradient colors={['#111419', '#090A0D']} style={StyleSheet.absoluteFill} />
-      <View style={styles.glow} />
+      <LinearGradient colors={['#0A1024', '#05070F', '#04050B']} style={StyleSheet.absoluteFill} />
+      <View style={styles.glowTop} pointerEvents="none" />
+      <View style={styles.glowBottom} pointerEvents="none" />
+
       <SafeAreaView style={styles.safe}>
-        <View style={styles.nav}>
-          <Text style={styles.wordmark}>GUILDLESS</Text>
-          <Text style={styles.stepLabel}>0{step} / 02</Text>
+        <View style={styles.hud}>
+          <View style={styles.hudRow}>
+            <View style={styles.hudLeft}>
+              <View style={styles.heartsRow}>
+                {Array.from({ length: MAX_HEALTH }, (_, i) => (
+                  <Text
+                    key={i}
+                    style={[styles.heart, run != null && i >= run.health && styles.heartLost]}
+                  >
+                    {'♥'}
+                  </Text>
+                ))}
+              </View>
+              <View style={[styles.comboChip, !comboOn && styles.comboChipIdle]}>
+                <Text style={styles.comboText}>{comboOn && run ? `×${run.combo}` : '×1'}</Text>
+                <View style={styles.comboTrack}>
+                  <View
+                    style={[
+                      styles.comboFill,
+                      { width: run ? `${comboWindowFraction(run, now) * 100}%` : '0%' },
+                    ]}
+                  />
+                </View>
+              </View>
+            </View>
+
+            <Text style={[styles.timer, urgent && styles.timerUrgent]}>{seconds}</Text>
+
+            <View style={styles.hudRight}>
+              <Text style={styles.scoreLabel}>SCORE</Text>
+              <Text style={styles.scoreValue}>{run ? run.score : 0}</Text>
+              {phase === 'playing' ? (
+                <Pressable
+                  accessibilityLabel="Pause"
+                  accessibilityRole="button"
+                  hitSlop={8}
+                  onPress={pauseRun}
+                  style={({ pressed }) => [styles.pauseButton, pressed && styles.pressed]}
+                >
+                  <View style={styles.pauseBar} />
+                  <View style={styles.pauseBar} />
+                </Pressable>
+              ) : (
+                <View style={styles.pauseSpacer} />
+              )}
+            </View>
+          </View>
+          <View style={styles.timeTrack}>
+            <View
+              style={[
+                styles.timeFill,
+                { width: `${timeFraction * 100}%` },
+                urgent && styles.timeFillUrgent,
+              ]}
+            />
+          </View>
         </View>
 
-        <View style={styles.onboarding}>
-          <View style={styles.eyebrowRow}>
-            <View style={styles.signal} />
-            <Text style={styles.eyebrow}>{step === 1 ? 'YOUR FIRST MISSION' : 'OPERATING LIMITS'}</Text>
-          </View>
-
-          {step === 1 ? (
-            <>
-              <Text style={styles.hero}>What should your{`\n`}company ship?</Text>
-              <Text style={styles.heroBody}>
-                Give us the outcome. Your AI company will plan the work, assign specialists, verify every handoff, and ask only when judgment matters.
-              </Text>
-              <View style={styles.inputShell}>
-                <TextInput
-                  autoFocus
-                  accessibilityLabel="Mission outcome"
-                  multiline
-                  placeholder="e.g. Ship a multiplayer roguelite on Steam"
-                  placeholderTextColor="#666B74"
-                  selectionColor="#D8FF62"
-                  value={goal}
-                  onChangeText={setGoal}
-                  style={styles.input}
+        <View
+          style={styles.arena}
+          onLayout={onArenaLayout}
+          onStartShouldSetResponder={() => true}
+          onMoveShouldSetResponder={() => true}
+          onResponderGrant={onTouch}
+          onResponderMove={onTouch}
+          onResponderRelease={onTouchEnd}
+          onResponderTerminate={onTouchEnd}
+        >
+          {world && (
+            <View style={StyleSheet.absoluteFill} pointerEvents="none">
+              {world.shards.map((shard) => {
+                const scale = 0.93 + 0.07 * Math.sin(shard.phase + now * 0.005);
+                return (
+                  <View
+                    key={shard.id}
+                    style={[
+                      styles.shard,
+                      {
+                        transform: [
+                          { translateX: shard.x - SHARD_VISUAL / 2 },
+                          { translateY: shard.y - SHARD_VISUAL / 2 },
+                          { rotate: '45deg' },
+                          { scale },
+                        ],
+                      },
+                    ]}
+                  />
+                );
+              })}
+              {world.mines.map((mine) => {
+                const scale = 0.95 + 0.05 * Math.sin(mine.phase);
+                return (
+                  <View
+                    key={mine.id}
+                    style={[
+                      styles.mine,
+                      {
+                        transform: [
+                          { translateX: mine.x - MINE_VISUAL / 2 },
+                          { translateY: mine.y - MINE_VISUAL / 2 },
+                          { scale },
+                        ],
+                      },
+                    ]}
+                  >
+                    <View style={styles.mineCore} />
+                  </View>
+                );
+              })}
+              {world.touching && phase === 'playing' && (
+                <View
+                  style={[
+                    styles.targetRing,
+                    {
+                      transform: [
+                        { translateX: world.target.x - TARGET_RING / 2 },
+                        { translateY: world.target.y - TARGET_RING / 2 },
+                      ],
+                    },
+                  ]}
                 />
-                <Text style={styles.inputHint}>OUTCOME, NOT TASKS</Text>
+              )}
+              <View
+                style={[
+                  styles.player,
+                  !playerVisible && styles.playerBlink,
+                  {
+                    transform: [
+                      { translateX: world.player.x - PLAYER_VISUAL / 2 },
+                      { translateY: world.player.y - PLAYER_VISUAL / 2 },
+                    ],
+                  },
+                ]}
+              >
+                <View style={styles.playerCore} />
               </View>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
-                {suggestedGoals.map((item) => (
-                  <Pressable key={item} onPress={() => setGoal(item)} style={({ pressed }) => [styles.chip, pressed && styles.pressed]}>
-                    <Text style={styles.chipText}>{item}</Text>
-                  </Pressable>
-                ))}
-              </ScrollView>
-            </>
-          ) : (
-            <>
-              <Text style={styles.hero}>Set the boundaries.{`\n`}We handle the work.</Text>
-              <Text style={styles.heroBody}>These are guardrails, not a project plan. You can change them while the mission is running.</Text>
-              <View style={styles.summaryCard}>
-                <Text style={styles.summaryLabel}>MISSION</Text>
-                <Text style={styles.summaryValue}>{brief.goal}</Text>
-              </View>
-              <Choice label="TARGET" value={brief.deadline} options={['14 days', '30 days', '90 days']} onChange={(deadline) => setBrief({ ...brief, deadline })} />
-              <Choice label="MAX SPEND" value={brief.budget} options={['$100', '$500', '$2,000']} onChange={(budget) => setBrief({ ...brief, budget })} />
-              <View style={styles.guardrail}>
-                <Text style={styles.guardrailMark}>✓</Text>
-                <Text style={styles.guardrailText}>Purchases, publishing, and destructive actions always require your approval.</Text>
-              </View>
-            </>
+            </View>
           )}
         </View>
-
-        <View style={styles.footer}>
-          <Text style={styles.footerNote}>{step === 1 ? 'No setup. No org chart.' : 'You remain the final authority.'}</Text>
-          <Pressable disabled={step === 1 && !goal.trim()} onPress={next} style={({ pressed }) => [styles.continueButton, step === 1 && !goal.trim() && styles.buttonDisabled, pressed && styles.pressed]}>
-            <Text style={styles.continueText}>{step === 1 ? 'Continue' : 'Launch company'}</Text>
-            <Text style={styles.arrow}>→</Text>
-          </Pressable>
-        </View>
       </SafeAreaView>
-    </View>
-  );
-}
 
-function Choice({ label, value, options, onChange }: { label: string; value: string; options: string[]; onChange: (value: string) => void }) {
-  return (
-    <View style={styles.choiceBlock}>
-      <Text style={styles.choiceLabel}>{label}</Text>
-      <View style={styles.choiceRow}>
-        {options.map((option) => (
-          <Pressable key={option} onPress={() => onChange(option)} style={({ pressed }) => [styles.choice, value === option && styles.choiceActive, pressed && styles.pressed]}>
-            <Text style={[styles.choiceText, value === option && styles.choiceTextActive]}>{option}</Text>
-          </Pressable>
-        ))}
-      </View>
-    </View>
-  );
-}
+      {phase === 'menu' && (
+        <View style={styles.overlay}>
+          <LinearGradient colors={['#0A1024', '#05070F']} style={StyleSheet.absoluteFill} />
+          <View style={styles.glowTop} pointerEvents="none" />
+          <SafeAreaView style={styles.overlaySafe}>
+            <View style={styles.menuBody}>
+              <Text style={styles.kicker}>60 SECONDS {'·'} ONE THUMB</Text>
+              <Text style={styles.titleNeon}>NEON</Text>
+              <Text style={styles.titleDrift}>DRIFT</Text>
 
-function CommandCenter({ brief, onReset }: { brief: Brief; onReset: () => void }) {
-  const [approved, setApproved] = useState(false);
-  const approve = async () => {
-    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    setApproved(true);
-  };
-
-  return (
-    <View style={styles.root}>
-      <StatusBar style="light" />
-      <LinearGradient colors={['#111419', '#090A0D']} style={StyleSheet.absoluteFill} />
-      <SafeAreaView style={styles.safe}>
-        <View style={styles.nav}>
-          <Text style={styles.wordmark}>GUILDLESS</Text>
-          <Pressable onPress={onReset} style={({ pressed }) => [styles.profile, pressed && styles.pressed]}><Text style={styles.profileText}>K</Text></Pressable>
-        </View>
-        <ScrollView contentContainerStyle={styles.commandScroll} showsVerticalScrollIndicator={false}>
-          <View style={styles.liveRow}><View style={styles.signal} /><Text style={styles.eyebrow}>COMPANY ONLINE</Text><Text style={styles.elapsed}>00:01:42</Text></View>
-          <Text style={styles.commandTitle}>{brief.goal}</Text>
-          <Text style={styles.commandMeta}>{brief.deadline} · {brief.budget} ceiling</Text>
-
-          <View style={styles.progressCard}>
-            <View style={styles.progressTop}><Text style={styles.progressPhase}>DISCOVERY</Text><Text style={styles.progressPercent}>12%</Text></View>
-            <View style={styles.track}><View style={styles.fill} /></View>
-            <Text style={styles.progressDetail}>Codex is decomposing the mission into independently verifiable work.</Text>
-          </View>
-
-          <Text style={styles.sectionLabel}>AUTONOMOUS CREW</Text>
-          <View style={styles.crewList}>
-            {crew.map(([role, model, task, color], index) => (
-              <View style={[styles.crewRow, index === crew.length - 1 && { borderBottomWidth: 0 }]} key={role}>
-                <View style={[styles.crewMark, { backgroundColor: color }]}><Text style={styles.crewMarkText}>{model[0]}</Text></View>
-                <View style={styles.crewCopy}><Text style={styles.crewRole}>{role}</Text><Text style={styles.crewTask}>{task}</Text></View>
-                <View style={styles.modelBadge}><Text style={styles.modelText}>{model}</Text></View>
+              <View style={styles.rules}>
+                <View style={styles.ruleRow}>
+                  <View style={styles.ruleIconOrb} />
+                  <Text style={styles.ruleText}>Drag the arena below the scoreboard. Your orb chases your thumb.</Text>
+                </View>
+                <View style={styles.ruleRow}>
+                  <View style={styles.ruleIconShard} />
+                  <Text style={styles.ruleText}>Catch shards. Chain them within 2.5s for up to a {'×'}10 combo.</Text>
+                </View>
+                <View style={styles.ruleRow}>
+                  <View style={styles.ruleIconMine} />
+                  <Text style={styles.ruleText}>Dodge mines. Each hit costs a heart. Three hearts per run.</Text>
+                </View>
               </View>
-            ))}
-          </View>
 
-          <Text style={styles.sectionLabel}>YOUR ATTENTION</Text>
-          <View style={[styles.decision, approved && styles.decisionApproved]}>
-            <Text style={styles.decisionLabel}>{approved ? 'DECISION RECORDED' : 'HIGH-IMPACT DECISION'}</Text>
-            <Text style={styles.decisionTitle}>{approved ? 'The crew is moving forward.' : 'Approve the product direction'}</Text>
-            <Text style={styles.decisionBody}>{approved ? 'Every downstream agent received the decision and its rationale.' : 'Three concepts were challenged by separate reviewers. Concept B has the strongest retention hypothesis and lowest delivery risk.'}</Text>
-            {!approved && <Pressable onPress={approve} style={({ pressed }) => [styles.approve, pressed && styles.pressed]}><Text style={styles.approveText}>Review evidence</Text><Text style={styles.darkArrow}>→</Text></Pressable>}
-          </View>
-        </ScrollView>
-      </SafeAreaView>
+              {bestRef.current > 0 && (
+                <Text style={styles.bestLine}>SESSION BEST {bestRef.current}</Text>
+              )}
+            </View>
+            <View style={styles.overlayFooter}>
+              <Pressable
+                accessibilityRole="button"
+                onPress={startRun}
+                style={({ pressed }) => [styles.primaryButton, pressed && styles.pressed]}
+              >
+                <Text style={styles.primaryButtonText}>PLAY</Text>
+              </Pressable>
+            </View>
+          </SafeAreaView>
+        </View>
+      )}
+
+      {phase === 'paused' && (
+        <View style={[styles.overlay, styles.dimOverlay]}>
+          <SafeAreaView style={styles.overlaySafe}>
+            <View style={styles.menuBody}>
+              <Text style={styles.kicker}>RUN FROZEN</Text>
+              <Text style={styles.overlayTitle}>PAUSED</Text>
+              <Text style={styles.overlayHint}>
+                {run ? `${secondsLeft(now)}s left · ${run.score} pts` : ''}
+              </Text>
+            </View>
+            <View style={styles.overlayFooter}>
+              <Pressable
+                accessibilityRole="button"
+                onPress={resumeRun}
+                style={({ pressed }) => [styles.primaryButton, pressed && styles.pressed]}
+              >
+                <Text style={styles.primaryButtonText}>RESUME</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                onPress={quitToMenu}
+                style={({ pressed }) => [styles.ghostButton, pressed && styles.pressed]}
+              >
+                <Text style={styles.ghostButtonText}>QUIT RUN</Text>
+              </Pressable>
+            </View>
+          </SafeAreaView>
+        </View>
+      )}
+
+      {phase === 'over' && world && run && (
+        <View style={[styles.overlay, styles.dimOverlay]}>
+          <SafeAreaView style={styles.overlaySafe}>
+            <View style={styles.menuBody}>
+              <Text style={[styles.kicker, world.endReason === 'down' && styles.kickerDanger]}>
+                {world.endReason === 'down' ? 'CORE DESTROYED' : 'RUN COMPLETE'}
+              </Text>
+              <Text style={styles.finalScore}>{run.score}</Text>
+              <Text style={styles.overlayHint}>
+                {world.newBest ? 'NEW SESSION BEST' : `SESSION BEST ${bestRef.current}`}
+              </Text>
+            </View>
+            <View style={styles.overlayFooter}>
+              <Pressable
+                accessibilityRole="button"
+                onPress={startRun}
+                style={({ pressed }) => [styles.primaryButton, pressed && styles.pressed]}
+              >
+                <Text style={styles.primaryButtonText}>RETRY</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                onPress={quitToMenu}
+                style={({ pressed }) => [styles.ghostButton, pressed && styles.pressed]}
+              >
+                <Text style={styles.ghostButtonText}>MENU</Text>
+              </Pressable>
+            </View>
+          </SafeAreaView>
+        </View>
+      )}
     </View>
   );
 }
+
+// Visual footprints match the collision diameters exactly.
+const PLAYER_VISUAL = PLAYER_RADIUS * 2;
+// The rotated square's diagonal remains inside the circular hit radius.
+const SHARD_VISUAL = SHARD_RADIUS * Math.SQRT2;
+const MINE_VISUAL = MINE_RADIUS * 2;
+const TARGET_RING = 30;
+
+const CYAN = '#53F1FF';
+const LIME = '#D8FF62';
+const MAGENTA = '#FF4D6E';
+const INK = '#EAF2FF';
+const DIM = '#8A93A8';
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#090A0D' },
+  root: { flex: 1, backgroundColor: '#04050B' },
   safe: { flex: 1 },
-  glow: { position: 'absolute', width: 360, height: 360, borderRadius: 180, backgroundColor: 'rgba(157,190,91,.09)', top: -210, right: -100 },
-  nav: { height: 72, paddingHorizontal: 22, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: Platform.OS === 'android' ? 18 : 0 },
-  wordmark: { color: '#F4F5F2', fontSize: 14, fontWeight: '800', letterSpacing: 2.2 },
-  stepLabel: { color: '#747982', fontSize: 11, fontWeight: '700', letterSpacing: 1.2, fontVariant: ['tabular-nums'] },
-  onboarding: { flex: 1, paddingHorizontal: 22, paddingTop: 42 },
-  eyebrowRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 18 },
-  signal: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#D8FF62', marginRight: 8 },
-  eyebrow: { color: '#AAB1B8', fontSize: 10, fontWeight: '800', letterSpacing: 1.6 },
-  hero: { color: '#F4F5F2', fontSize: 39, lineHeight: 43, letterSpacing: -1.5, fontWeight: '700' },
-  heroBody: { color: '#91969E', fontSize: 15, lineHeight: 23, marginTop: 18, maxWidth: 360 },
-  inputShell: { minHeight: 132, borderRadius: 20, backgroundColor: '#15181D', borderWidth: 1, borderColor: '#343A43', marginTop: 34, padding: 18 },
-  input: { flex: 1, color: '#F5F6F3', fontSize: 18, lineHeight: 25, textAlignVertical: 'top', padding: 0 },
-  inputHint: { color: '#626871', fontSize: 8, fontWeight: '800', letterSpacing: 1.2, marginTop: 12 },
-  chips: { gap: 8, paddingTop: 13, paddingRight: 22 },
-  chip: { borderWidth: 1, borderColor: '#30353D', borderRadius: 99, paddingHorizontal: 14, paddingVertical: 10, backgroundColor: '#111419' },
-  chipText: { color: '#A8ADB5', fontSize: 11, fontWeight: '600' },
-  footer: { paddingHorizontal: 22, paddingBottom: Platform.OS === 'ios' ? 10 : 18, flexDirection: 'row', alignItems: 'center', gap: 14 },
-  footerNote: { flex: 1, color: '#626871', fontSize: 10 },
-  continueButton: { minWidth: 166, height: 56, borderRadius: 17, paddingHorizontal: 19, backgroundColor: '#D8FF62', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  buttonDisabled: { opacity: .28 },
-  continueText: { color: '#12150D', fontSize: 14, fontWeight: '800' },
-  arrow: { color: '#12150D', fontSize: 21, marginLeft: 20 },
-  pressed: { opacity: .72, transform: [{ scale: .975 }] },
-  summaryCard: { backgroundColor: '#15181D', borderRadius: 18, borderWidth: 1, borderColor: '#2B3038', padding: 17, marginTop: 28 },
-  summaryLabel: { color: '#656B74', fontSize: 8, fontWeight: '800', letterSpacing: 1.3 },
-  summaryValue: { color: '#E9EBE7', fontSize: 15, lineHeight: 21, fontWeight: '600', marginTop: 8 },
-  choiceBlock: { marginTop: 24 },
-  choiceLabel: { color: '#777D86', fontSize: 9, fontWeight: '800', letterSpacing: 1.3, marginBottom: 10 },
-  choiceRow: { flexDirection: 'row', gap: 8 },
-  choice: { flex: 1, height: 45, borderRadius: 13, borderWidth: 1, borderColor: '#2D323A', alignItems: 'center', justifyContent: 'center', backgroundColor: '#12151A' },
-  choiceActive: { backgroundColor: '#EAECE7', borderColor: '#EAECE7' },
-  choiceText: { color: '#848A93', fontSize: 11, fontWeight: '700' },
-  choiceTextActive: { color: '#171A16' },
-  guardrail: { flexDirection: 'row', backgroundColor: '#131812', borderRadius: 14, padding: 14, marginTop: 24, alignItems: 'flex-start' },
-  guardrailMark: { color: '#D8FF62', fontSize: 12, fontWeight: '900', marginRight: 10 },
-  guardrailText: { color: '#8F9987', fontSize: 10, lineHeight: 15, flex: 1 },
-  profile: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#20242A', alignItems: 'center', justifyContent: 'center' },
-  profileText: { color: '#D8FF62', fontSize: 12, fontWeight: '800' },
-  commandScroll: { paddingHorizontal: 22, paddingTop: 28, paddingBottom: 60 },
-  liveRow: { flexDirection: 'row', alignItems: 'center' },
-  elapsed: { color: '#616770', fontSize: 9, fontVariant: ['tabular-nums'], marginLeft: 'auto' },
-  commandTitle: { color: '#F3F4F1', fontSize: 31, lineHeight: 36, letterSpacing: -1, fontWeight: '700', marginTop: 16 },
-  commandMeta: { color: '#737982', fontSize: 11, marginTop: 9 },
-  progressCard: { borderRadius: 20, backgroundColor: '#15191D', borderWidth: 1, borderColor: '#2A3037', padding: 18, marginTop: 28 },
-  progressTop: { flexDirection: 'row', justifyContent: 'space-between' },
-  progressPhase: { color: '#D8FF62', fontSize: 9, fontWeight: '800', letterSpacing: 1.3 },
-  progressPercent: { color: '#8C929A', fontSize: 10, fontWeight: '700' },
-  track: { height: 4, backgroundColor: '#2A2F34', borderRadius: 2, marginTop: 15, overflow: 'hidden' },
-  fill: { width: '12%', height: 4, backgroundColor: '#D8FF62', borderRadius: 2 },
-  progressDetail: { color: '#8D939B', fontSize: 11, lineHeight: 17, marginTop: 14 },
-  sectionLabel: { color: '#676D76', fontSize: 9, fontWeight: '800', letterSpacing: 1.5, marginTop: 28, marginBottom: 11 },
-  crewList: { backgroundColor: '#13161A', borderRadius: 20, paddingHorizontal: 15, borderWidth: 1, borderColor: '#292E35' },
-  crewRow: { minHeight: 69, flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#292E35' },
-  crewMark: { width: 32, height: 32, borderRadius: 10, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
-  crewMarkText: { color: '#14171A', fontSize: 11, fontWeight: '900' },
-  crewCopy: { flex: 1 },
-  crewRole: { color: '#E1E4E0', fontSize: 10, fontWeight: '800', letterSpacing: .7 },
-  crewTask: { color: '#6F757E', fontSize: 9, marginTop: 4 },
-  modelBadge: { paddingHorizontal: 8, paddingVertical: 5, borderRadius: 7, backgroundColor: '#20242A' },
-  modelText: { color: '#8D939C', fontSize: 8, fontWeight: '700' },
-  decision: { backgroundColor: '#211B18', borderRadius: 20, borderWidth: 1, borderColor: '#49382F', padding: 18 },
-  decisionApproved: { backgroundColor: '#151D15', borderColor: '#344832' },
-  decisionLabel: { color: '#EFA06C', fontSize: 8, fontWeight: '800', letterSpacing: 1.3 },
-  decisionTitle: { color: '#F2F1EE', fontSize: 17, fontWeight: '700', marginTop: 12 },
-  decisionBody: { color: '#968D88', fontSize: 11, lineHeight: 17, marginTop: 8 },
-  approve: { height: 48, borderRadius: 14, backgroundColor: '#F0F1ED', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, marginTop: 17 },
-  approveText: { color: '#171914', fontSize: 12, fontWeight: '800' },
-  darkArrow: { color: '#171914', fontSize: 18 },
+  glowTop: {
+    position: 'absolute',
+    width: 420,
+    height: 420,
+    borderRadius: 210,
+    backgroundColor: 'rgba(83,241,255,0.07)',
+    top: -240,
+    left: -120,
+  },
+  glowBottom: {
+    position: 'absolute',
+    width: 380,
+    height: 380,
+    borderRadius: 190,
+    backgroundColor: 'rgba(255,77,110,0.055)',
+    bottom: -220,
+    right: -140,
+  },
+
+  hud: {
+    paddingHorizontal: 20,
+    paddingTop: Platform.OS === 'android' ? 24 : 6,
+  },
+  hudRow: {
+    height: 92,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+  },
+  hudLeft: { width: 108, paddingTop: 8 },
+  heartsRow: { flexDirection: 'row', gap: 4 },
+  heart: {
+    color: MAGENTA,
+    fontSize: 20,
+    textShadowColor: 'rgba(255,77,110,0.75)',
+    textShadowRadius: 10,
+  },
+  heartLost: { color: '#232A3D', textShadowColor: 'transparent' },
+  comboChip: { marginTop: 10, width: 88 },
+  comboChipIdle: { opacity: 0.35 },
+  comboText: {
+    color: LIME,
+    fontSize: 20,
+    fontWeight: '900',
+    fontVariant: ['tabular-nums'],
+    textShadowColor: 'rgba(216,255,98,0.6)',
+    textShadowRadius: 8,
+  },
+  comboTrack: {
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#1A2233',
+    marginTop: 5,
+    overflow: 'hidden',
+  },
+  comboFill: { height: 4, borderRadius: 2, backgroundColor: LIME },
+  timer: {
+    color: INK,
+    fontSize: 58,
+    fontWeight: '800',
+    letterSpacing: -2,
+    fontVariant: ['tabular-nums'],
+    textShadowColor: 'rgba(83,241,255,0.35)',
+    textShadowRadius: 16,
+  },
+  timerUrgent: { color: MAGENTA, textShadowColor: 'rgba(255,77,110,0.55)' },
+  hudRight: { width: 108, alignItems: 'flex-end', paddingTop: 8 },
+  scoreLabel: { color: DIM, fontSize: 10, fontWeight: '800', letterSpacing: 1.6 },
+  scoreValue: {
+    color: INK,
+    fontSize: 26,
+    fontWeight: '800',
+    fontVariant: ['tabular-nums'],
+    marginTop: 2,
+  },
+  pauseButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    marginTop: 2,
+    backgroundColor: 'rgba(20,27,45,0.85)',
+    borderWidth: 1,
+    borderColor: '#26314C',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+  },
+  pauseSpacer: { width: 48, height: 48, marginTop: 2 },
+  pauseBar: { width: 5, height: 18, borderRadius: 2.5, backgroundColor: INK },
+  timeTrack: {
+    height: 3,
+    borderRadius: 1.5,
+    backgroundColor: '#131A2C',
+    overflow: 'hidden',
+    marginTop: 2,
+  },
+  timeFill: { height: 3, borderRadius: 1.5, backgroundColor: CYAN },
+  timeFillUrgent: { backgroundColor: MAGENTA },
+
+  arena: { flex: 1 },
+  player: {
+    position: 'absolute',
+    width: PLAYER_VISUAL,
+    height: PLAYER_VISUAL,
+    borderRadius: PLAYER_VISUAL / 2,
+    backgroundColor: 'rgba(83,241,255,0.22)',
+    borderWidth: 2,
+    borderColor: CYAN,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: CYAN,
+    shadowOpacity: 0.9,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 10,
+  },
+  playerBlink: { opacity: 0.3 },
+  playerCore: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#DFFCFF',
+  },
+  shard: {
+    position: 'absolute',
+    width: SHARD_VISUAL,
+    height: SHARD_VISUAL,
+    borderRadius: 4,
+    backgroundColor: LIME,
+    shadowColor: LIME,
+    shadowOpacity: 0.9,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 8,
+  },
+  mine: {
+    position: 'absolute',
+    width: MINE_VISUAL,
+    height: MINE_VISUAL,
+    borderRadius: MINE_VISUAL / 2,
+    backgroundColor: 'rgba(255,77,110,0.12)',
+    borderWidth: 2,
+    borderColor: MAGENTA,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: MAGENTA,
+    shadowOpacity: 0.8,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 8,
+  },
+  mineCore: { width: 8, height: 8, borderRadius: 4, backgroundColor: MAGENTA },
+  targetRing: {
+    position: 'absolute',
+    width: TARGET_RING,
+    height: TARGET_RING,
+    borderRadius: TARGET_RING / 2,
+    borderWidth: 1.5,
+    borderColor: 'rgba(234,242,255,0.28)',
+  },
+
+  overlay: { ...StyleSheet.absoluteFillObject },
+  dimOverlay: { backgroundColor: 'rgba(4,6,12,0.9)' },
+  overlaySafe: { flex: 1, paddingHorizontal: 28 },
+  menuBody: { flex: 1, justifyContent: 'center' },
+  kicker: {
+    color: CYAN,
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 3,
+    marginBottom: 14,
+  },
+  kickerDanger: { color: MAGENTA },
+  titleNeon: {
+    color: CYAN,
+    fontSize: 64,
+    fontWeight: '900',
+    letterSpacing: 8,
+    lineHeight: 68,
+    textShadowColor: 'rgba(83,241,255,0.6)',
+    textShadowRadius: 22,
+  },
+  titleDrift: {
+    color: INK,
+    fontSize: 64,
+    fontWeight: '900',
+    letterSpacing: 8,
+    lineHeight: 72,
+  },
+  rules: { marginTop: 36, gap: 18 },
+  ruleRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  ruleIconOrb: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 2,
+    borderColor: CYAN,
+    backgroundColor: 'rgba(83,241,255,0.2)',
+  },
+  ruleIconShard: {
+    width: 16,
+    height: 16,
+    borderRadius: 3,
+    backgroundColor: LIME,
+    transform: [{ rotate: '45deg' }],
+  },
+  ruleIconMine: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 2,
+    borderColor: MAGENTA,
+    backgroundColor: 'rgba(255,77,110,0.15)',
+  },
+  ruleText: { color: DIM, fontSize: 15, lineHeight: 21, flex: 1 },
+  bestLine: {
+    color: LIME,
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 2,
+    marginTop: 30,
+    fontVariant: ['tabular-nums'],
+  },
+  overlayTitle: {
+    color: INK,
+    fontSize: 52,
+    fontWeight: '900',
+    letterSpacing: 4,
+  },
+  overlayHint: {
+    color: DIM,
+    fontSize: 15,
+    marginTop: 16,
+    fontVariant: ['tabular-nums'],
+    letterSpacing: 1,
+  },
+  finalScore: {
+    color: INK,
+    fontSize: 96,
+    fontWeight: '900',
+    letterSpacing: -2,
+    fontVariant: ['tabular-nums'],
+    textShadowColor: 'rgba(83,241,255,0.4)',
+    textShadowRadius: 24,
+  },
+  overlayFooter: { paddingBottom: Platform.OS === 'ios' ? 18 : 28, gap: 12 },
+  primaryButton: {
+    height: 60,
+    borderRadius: 18,
+    backgroundColor: CYAN,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: CYAN,
+    shadowOpacity: 0.45,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 10,
+  },
+  primaryButtonText: {
+    color: '#04121A',
+    fontSize: 17,
+    fontWeight: '900',
+    letterSpacing: 3,
+  },
+  ghostButton: {
+    height: 56,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#2A3450',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(13,18,33,0.6)',
+  },
+  ghostButtonText: { color: DIM, fontSize: 14, fontWeight: '800', letterSpacing: 2.5 },
+  pressed: { opacity: 0.75, transform: [{ scale: 0.98 }] },
 });
