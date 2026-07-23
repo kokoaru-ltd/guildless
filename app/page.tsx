@@ -3,14 +3,14 @@
 import { useEffect, useRef, useState } from "react";
 
 type Locale = "en" | "ja";
-type Section = "task" | "all" | "agents" | "connectors";
+type Section = "home" | "task" | "all" | "agents" | "connectors";
 type Worktab = "Preview" | "Files" | "Activity" | "MCP";
 type SpeechLike = { lang:string; continuous:boolean; interimResults:boolean; start():void; stop():void; onresult:((e:{results:ArrayLike<{0:{transcript:string}}>})=>void)|null; onend:(()=>void)|null; onerror:(()=>void)|null };
 declare global { interface Window { SpeechRecognition?:new()=>SpeechLike; webkitSpeechRecognition?:new()=>SpeechLike } }
 
 const ui = {
-  en: { newTask:"New task", search:"Search", tasks:"All tasks", agents:"Agents", connectors:"Connectors", projects:"PROJECTS", recent:"RECENT", title:"Build a playable iOS game with an AI company", done:"Completed", owner:"You", input:"Ask GUILDLESS to build, change, or investigate anything", send:"Send", work:"Workstation", language:"日本語", deliverable:"Final deliverable", connected:"Connected", permissions:"Permissions", used:"Used in this mission" },
-  ja: { newTask:"新しいタスク", search:"検索", tasks:"すべてのタスク", agents:"AIエージェント", connectors:"接続", projects:"プロジェクト", recent:"最近", title:"AI企業で遊べるiOSゲームを開発する", done:"完了", owner:"あなた", input:"GUILDLESSに作成・変更・調査を指示する", send:"送信", work:"ワークステーション", language:"English", deliverable:"最終成果物", connected:"接続済み", permissions:"権限", used:"このミッションで使用" },
+  en: { newTask:"New task", search:"Search", tasks:"Agents", agents:"Plugins", connectors:"Connectors", projects:"PROJECTS", recent:"TASKS", title:"Build a playable iOS game with an AI company", done:"Completed", owner:"You", input:"Assign a mission, or type / for more", send:"Send", work:"Workstation", language:"日本語", deliverable:"Final deliverable", connected:"Connected", permissions:"Permissions", used:"Used in this mission" },
+  ja: { newTask:"新しいタスク", search:"検索", tasks:"エージェント", agents:"プラグイン", connectors:"接続", projects:"プロジェクト", recent:"タスク", title:"AI企業で遊べるiOSゲームを開発する", done:"完了", owner:"あなた", input:"ミッションを割り当てるか、/ で機能を表示", send:"送信", work:"ワークステーション", language:"English", deliverable:"最終成果物", connected:"接続済み", permissions:"権限", used:"このミッションで使用" },
 };
 
 const steps = [
@@ -49,7 +49,7 @@ function MiniGame() {
 
 export default function Home() {
   const [locale,setLocale]=useState<Locale>("en");
-  const [section,setSection]=useState<Section>("task");
+  const [section,setSection]=useState<Section>("home");
   const [tab,setTab]=useState<Worktab>("Preview");
   const [draft,setDraft]=useState("");
   const [messages,setMessages]=useState<string[]>([]);
@@ -59,18 +59,18 @@ export default function Home() {
   useEffect(()=>{const saved=localStorage.getItem("guildless.locale");if(saved==="ja"||saved==="en")setLocale(saved)},[]);
   useEffect(()=>()=>speech.current?.stop(),[]);
   const switchLocale=()=>{const n=locale==="en"?"ja":"en";setLocale(n);localStorage.setItem("guildless.locale",n)};
-  const submit=()=>{if(!draft.trim())return;setMessages(v=>[...v,draft.trim()]);setDraft("")};
+  const submit=()=>{if(!draft.trim())return;setMessages(v=>[...v,draft.trim()]);setDraft("");setSection("task")};
   const voice=()=>{if(listening){speech.current?.stop();setListening(false);return}const C=window.SpeechRecognition||window.webkitSpeechRecognition;if(!C)return alert("Voice input requires Chrome or Edge.");const r=new C();r.lang=locale==="ja"?"ja-JP":"en-US";r.continuous=false;r.interimResults=false;r.onresult=e=>setDraft(e.results[e.results.length-1]?.[0]?.transcript??"");r.onend=()=>setListening(false);r.onerror=()=>setListening(false);speech.current=r;r.start();setListening(true)};
 
   return <main className="manus-shell">
     <aside className="manus-sidebar">
       <header><div className="gl-orb">G</div><strong>GUILDLESS</strong><button>⌄</button></header>
-      <button className="new-task" onClick={()=>setSection("task")}><span>＋</span>{t.newTask}<kbd>⌘ K</kbd></button>
+      <button className="new-task" onClick={()=>setSection("home")}><span>＋</span>{t.newTask}</button>
       <nav>
         <button><i>⌕</i>{t.search}</button>
-        <button className={section==="all"?"active":""} onClick={()=>setSection("all")}><i>▤</i>{t.tasks}<em>2</em></button>
-        <button className={section==="agents"?"active":""} onClick={()=>setSection("agents")}><i>◇</i>{t.agents}</button>
-        <button className={section==="connectors"?"active":""} onClick={()=>setSection("connectors")}><i>⌁</i>{t.connectors}</button>
+        <button className={section==="all"?"active":""} onClick={()=>setSection("all")}><i>⌾</i>{t.tasks}</button>
+        <button className={section==="agents"?"active":""} onClick={()=>setSection("agents")}><i>⌘</i>{t.agents}</button>
+        <button className={section==="connectors"?"active":""} onClick={()=>setSection("connectors")}><i>◫</i>{t.connectors}</button>
       </nav>
       <div className="side-group"><small>{t.projects}</small><button className="project"><i className="project-dot"/>GUILDLESS <span>•••</span></button></div>
       <div className="side-group history"><small>{t.recent}</small>
@@ -79,6 +79,26 @@ export default function Home() {
       </div>
       <footer><div className="avatar">KK</div><span><b>kokoaru-ltd</b><small>Owner workspace</small></span><button>•••</button></footer>
     </aside>
+
+    {section==="home"&&<section className="manus-home">
+      <header className="home-top"><button className="model-selector">GUILDLESS 1.0 <span>⌄</span></button><div><button className="credit">✣ 300</button><button onClick={switchLocale}>{t.language}</button></div></header>
+      <div className="home-center">
+        <div className="plan-row"><span>LOCAL PLAN</span><button>Connect more AI</button></div>
+        <h1>{locale==="ja"?"何を実現しましょうか？":"What should your company build?"}</h1>
+        <div className={`home-composer ${listening?"listening":""}`}>
+          <textarea autoFocus value={draft} onChange={e=>setDraft(e.target.value)} placeholder={t.input} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();submit()}}}/>
+          <div><button>＋</button><button title="Connectors">⌁</button><button className="desktop-pill">▣ Local computer</button><span/><button title="Route models">◉</button><button onClick={voice} title="Voice input">{listening?"■":"♩"}</button><button className="home-send" disabled={!draft.trim()} onClick={submit}>↑</button></div>
+        </div>
+        <div className="quick-actions">
+          <button onClick={()=>setDraft("Build a conversion landing page and verify it with another AI.")}>▱ Build website</button>
+          <button onClick={()=>setDraft("Design and build a playable iOS game.")}>♙ Build a game</button>
+          <button onClick={()=>setDraft("Research the best open-source tools on GitHub and X.")}>⌕ Deep research</button>
+          <button onClick={()=>setSection("connectors")}>⌘ MCP</button>
+          <button>••• More</button>
+        </div>
+      </div>
+      <button className="home-feature" onClick={()=>setSection("task")}><span><b>See a company build a game</b><small>Kimi designs · Claude builds · Codex reviews</small></span><div className="feature-art"><i/><i/><i/></div></button>
+    </section>}
 
     {section==="task" && <><section className="conversation">
       <header className="taskbar"><div><h1>{t.title}</h1><span><i/> {t.done} · 25m</span></div><div><button>↗</button><button>•••</button></div></header>
