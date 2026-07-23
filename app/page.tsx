@@ -5,12 +5,13 @@ import { useEffect, useRef, useState } from "react";
 type Locale = "en" | "ja";
 type Section = "home" | "task" | "all" | "agents" | "connectors";
 type Worktab = "Preview" | "Files" | "Activity" | "MCP";
+type ModelId = "auto" | "codex" | "claude" | "kimi" | "grok" | "gemini";
 type SpeechLike = { lang:string; continuous:boolean; interimResults:boolean; start():void; stop():void; onresult:((e:{results:ArrayLike<{0:{transcript:string}}>})=>void)|null; onend:(()=>void)|null; onerror:(()=>void)|null };
 declare global { interface Window { SpeechRecognition?:new()=>SpeechLike; webkitSpeechRecognition?:new()=>SpeechLike } }
 
 const ui = {
-  en: { newTask:"New task", search:"Search", tasks:"Agents", agents:"Plugins", connectors:"Connectors", projects:"PROJECTS", recent:"TASKS", title:"Build a playable iOS game with an AI company", done:"Completed", owner:"You", input:"Assign a mission, or type / for more", send:"Send", work:"Workstation", language:"日本語", deliverable:"Final deliverable", connected:"Connected", permissions:"Permissions", used:"Used in this mission" },
-  ja: { newTask:"新しいタスク", search:"検索", tasks:"エージェント", agents:"プラグイン", connectors:"接続", projects:"プロジェクト", recent:"タスク", title:"AI企業で遊べるiOSゲームを開発する", done:"完了", owner:"あなた", input:"ミッションを割り当てるか、/ で機能を表示", send:"送信", work:"ワークステーション", language:"English", deliverable:"最終成果物", connected:"接続済み", permissions:"権限", used:"このミッションで使用" },
+  en: { newTask:"New task", search:"Search", tasks:"Missions", agents:"Agents", connectors:"Connectors", projects:"PROJECTS", recent:"TASKS", title:"Build a playable iOS game with an AI company", done:"Completed", owner:"You", input:"Assign a mission, or type / for more", send:"Send", work:"Workstation", language:"日本語", deliverable:"Final deliverable", connected:"Connected", permissions:"Permissions", used:"Used in this mission" },
+  ja: { newTask:"新しいタスク", search:"検索", tasks:"ミッション", agents:"エージェント", connectors:"接続", projects:"プロジェクト", recent:"タスク", title:"AI企業で遊べるiOSゲームを開発する", done:"完了", owner:"あなた", input:"ミッションを割り当てるか、/ で機能を表示", send:"送信", work:"ワークステーション", language:"English", deliverable:"最終成果物", connected:"接続済み", permissions:"権限", used:"このミッションで使用" },
 };
 
 const steps = [
@@ -54,20 +55,31 @@ export default function Home() {
   const [draft,setDraft]=useState("");
   const [messages,setMessages]=useState<string[]>([]);
   const [listening,setListening]=useState(false);
+  const [signedIn,setSignedIn]=useState(false);
+  const [authOpen,setAuthOpen]=useState(false);
+  const [modelOpen,setModelOpen]=useState(false);
+  const [activeModel,setActiveModel]=useState<ModelId>("auto");
+  const [searchOpen,setSearchOpen]=useState(false);
+  const [searchQuery,setSearchQuery]=useState("");
+  const [notice,setNotice]=useState("");
+  const [connectorStates,setConnectorStates]=useState<Record<string,boolean>>(()=>Object.fromEntries(connectors.map(c=>[c.name,c.state==="connected"])));
   const speech=useRef<SpeechLike|null>(null);
   const t=ui[locale];
-  useEffect(()=>{const saved=localStorage.getItem("guildless.locale");if(saved==="ja"||saved==="en")setLocale(saved)},[]);
+  useEffect(()=>{const saved=localStorage.getItem("guildless.locale");if(saved==="ja"||saved==="en")setLocale(saved);setSignedIn(localStorage.getItem("guildless.auth")==="1")},[]);
   useEffect(()=>()=>speech.current?.stop(),[]);
   const switchLocale=()=>{const n=locale==="en"?"ja":"en";setLocale(n);localStorage.setItem("guildless.locale",n)};
   const submit=()=>{if(!draft.trim())return;setMessages(v=>[...v,draft.trim()]);setDraft("");setSection("task")};
+  const signIn=()=>{localStorage.setItem("guildless.auth","1");setSignedIn(true);setAuthOpen(false);setNotice("Workspace connected")};
+  const signOut=()=>{localStorage.removeItem("guildless.auth");setSignedIn(false);setAuthOpen(false);setSection("home")};
+  const flash=(message:string)=>{setNotice(message);window.setTimeout(()=>setNotice(""),1800)};
   const voice=()=>{if(listening){speech.current?.stop();setListening(false);return}const C=window.SpeechRecognition||window.webkitSpeechRecognition;if(!C)return alert("Voice input requires Chrome or Edge.");const r=new C();r.lang=locale==="ja"?"ja-JP":"en-US";r.continuous=false;r.interimResults=false;r.onresult=e=>setDraft(e.results[e.results.length-1]?.[0]?.transcript??"");r.onend=()=>setListening(false);r.onerror=()=>setListening(false);speech.current=r;r.start();setListening(true)};
 
   return <main className="manus-shell">
     <aside className="manus-sidebar">
-      <header><div className="gl-orb">G</div><strong>GUILDLESS</strong><button>⌄</button></header>
+      <header><div className="gl-orb">GL</div><strong>GUILDLESS</strong><button aria-label="Collapse sidebar" onClick={()=>flash("Sidebar control ready")}>⌄</button></header>
       <button className="new-task" onClick={()=>setSection("home")}><span>＋</span>{t.newTask}</button>
       <nav>
-        <button><i>⌕</i>{t.search}</button>
+        <button onClick={()=>setSearchOpen(true)}><i>⌕</i>{t.search}</button>
         <button className={section==="all"?"active":""} onClick={()=>setSection("all")}><i>⌾</i>{t.tasks}</button>
         <button className={section==="agents"?"active":""} onClick={()=>setSection("agents")}><i>⌘</i>{t.agents}</button>
         <button className={section==="connectors"?"active":""} onClick={()=>setSection("connectors")}><i>◫</i>{t.connectors}</button>
@@ -75,33 +87,33 @@ export default function Home() {
       <div className="side-group"><small>{t.projects}</small><button className="project"><i className="project-dot"/>GUILDLESS <span>•••</span></button></div>
       <div className="side-group history"><small>{t.recent}</small>
         <button className={section==="task"?"selected":""} onClick={()=>setSection("task")}><i>◉</i><span>{t.title}<small>{t.done} · 14:09</small></span></button>
-        <button><i>⌘</i><span>Hello world CLI<small>{t.done} · 13:05</small></span></button>
+        <button onClick={()=>{setSection("task");setTab("Activity")}}><i>›_</i><span>Hello world CLI<small>{t.done} · 13:05</small></span></button>
       </div>
-      <footer><div className="avatar">KK</div><span><b>kokoaru-ltd</b><small>Owner workspace</small></span><button>•••</button></footer>
+      <footer><button className="account-button" onClick={()=>setAuthOpen(true)}><div className="avatar">{signedIn?"KK":"?"}</div><span><b>{signedIn?"kokoaru-ltd":"Sign in"}</b><small>{signedIn?"Owner workspace":"Connect your workspace"}</small></span><em>•••</em></button></footer>
     </aside>
 
     {section==="home"&&<section className="manus-home">
-      <header className="home-top"><button className="model-selector">GUILDLESS 1.0 <span>⌄</span></button><div><button className="credit">✣ 300</button><button onClick={switchLocale}>{t.language}</button></div></header>
+      <header className="home-top"><div className="model-anchor"><button className="model-selector" onClick={()=>setModelOpen(v=>!v)}>{activeModel==="auto"?"GUILDLESS AUTO":activeModel.toUpperCase()} <span>⌄</span></button>{modelOpen&&<ModelMenu value={activeModel} onChange={m=>{setActiveModel(m);setModelOpen(false);flash(m==="auto"?"Auto-routing enabled":`${m} selected`)}}/>}</div><div><button className="credit" onClick={()=>flash("Bring your own AI accounts")}>✣ 300</button><button onClick={switchLocale}>{t.language}</button></div></header>
       <div className="home-center">
-        <div className="plan-row"><span>LOCAL PLAN</span><button>Connect more AI</button></div>
+        <div className="plan-row"><span>LOCAL PLAN</span><button onClick={()=>setSection("agents")}>Connect more AI</button></div>
         <h1>{locale==="ja"?"何を実現しましょうか？":"What should your company build?"}</h1>
         <div className={`home-composer ${listening?"listening":""}`}>
           <textarea autoFocus value={draft} onChange={e=>setDraft(e.target.value)} placeholder={t.input} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();submit()}}}/>
-          <div><button>＋</button><button title="Connectors">⌁</button><button className="desktop-pill">▣ Local computer</button><span/><button title="Route models">◉</button><button onClick={voice} title="Voice input">{listening?"■":"♩"}</button><button className="home-send" disabled={!draft.trim()} onClick={submit}>↑</button></div>
+          <div><button onClick={()=>flash("File attachment ready")}>＋</button><button title="Connectors" onClick={()=>setSection("connectors")}>⌘</button><button className="desktop-pill" onClick={()=>flash("Local workspace selected")}>▣ Local computer</button><span/><button title="Route models" onClick={()=>setModelOpen(v=>!v)}>◉</button><button onClick={voice} title="Voice input">{listening?"■":"♩"}</button><button className="home-send" disabled={!draft.trim()} onClick={submit}>↑</button></div>
         </div>
         <div className="quick-actions">
           <button onClick={()=>setDraft("Build a conversion landing page and verify it with another AI.")}>▱ Build website</button>
           <button onClick={()=>setDraft("Design and build a playable iOS game.")}>♙ Build a game</button>
           <button onClick={()=>setDraft("Research the best open-source tools on GitHub and X.")}>⌕ Deep research</button>
           <button onClick={()=>setSection("connectors")}>⌘ MCP</button>
-          <button>••• More</button>
+          <button onClick={()=>setSection("all")}>••• More</button>
         </div>
       </div>
       <button className="home-feature" onClick={()=>setSection("task")}><span><b>See a company build a game</b><small>Kimi designs · Claude builds · Codex reviews</small></span><div className="feature-art"><i/><i/><i/></div></button>
     </section>}
 
     {section==="task" && <><section className="conversation">
-      <header className="taskbar"><div><h1>{t.title}</h1><span><i/> {t.done} · 25m</span></div><div><button>↗</button><button>•••</button></div></header>
+      <header className="taskbar"><div><h1>{t.title}</h1><span><i/> {t.done} · 25m</span></div><div><button onClick={()=>flash("Share link copied")}>↗</button><button onClick={()=>setTab("Activity")}>•••</button></div></header>
       <div className="thread">
         <div className="owner-message"><div className="avatar small">KK</div><div><b>{t.owner}</b><p>Build a genuinely playable iOS game. Use Kimi for product judgment, Claude for implementation, and a separate AI for review. Do not call it done until the tests and independent gate pass.</p></div></div>
         <div className="agent-intro"><div className="gl-orb small">G</div><div><b>GUILDLESS</b><p>I’ll run this as a governed production mission. The implementer cannot approve its own work.</p></div></div>
@@ -116,7 +128,7 @@ export default function Home() {
         </div></div>
         {messages.map((m,i)=><div className="owner-message new-message" key={i}><div className="avatar small">KK</div><div><b>{t.owner}</b><p>{m}</p></div></div>)}
       </div>
-      <div className="composer-wrap"><div className={`manus-composer ${listening?"listening":""}`}><textarea value={draft} onChange={e=>setDraft(e.target.value)} placeholder={t.input} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();submit()}}}/><div><button>＋</button><button className="model-pill">Auto route⌄</button><span/><button onClick={voice} aria-label="Voice input">{listening?"■":"♩"}</button><button className="send" disabled={!draft.trim()} onClick={submit}>↑</button></div></div><small>GUILDLESS can make mistakes. Every release still requires evidence.</small></div>
+      <div className="composer-wrap"><div className={`manus-composer ${listening?"listening":""}`}><textarea value={draft} onChange={e=>setDraft(e.target.value)} placeholder={t.input} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();submit()}}}/><div><button onClick={()=>flash("File attachment ready")}>＋</button><button className="model-pill" onClick={()=>{setSection("agents");flash("Choose a mission model")}}>{activeModel==="auto"?"Auto route":activeModel}⌄</button><span/><button onClick={voice} aria-label="Voice input">{listening?"■":"♩"}</button><button className="send" disabled={!draft.trim()} onClick={submit}>↑</button></div></div><small>Builders cannot approve their own release. Every handoff keeps evidence.</small></div>
     </section>
 
     <aside className="workstation">
@@ -125,18 +137,26 @@ export default function Home() {
       {tab==="Preview"&&<div className="preview-pane"><div className="preview-toolbar"><span><i/> Expo · iOS</span><button>↻</button></div><div className="preview-canvas"><MiniGame/></div><div className="deliverable"><header><span><i>✓</i><b>{t.deliverable}</b></span><em>VERIFIED</em></header><h3>NEON DRIFT</h3><p>Playable one-thumb arcade game · Expo SDK 54</p><div><span>34 tests</span><span>Commit 35f1f0d</span></div><button>Open source ↗</button></div></div>}
       {tab==="Files"&&<div className="files-pane"><header><span>guildless / apps / mobile</span></header>{[["App.tsx","24.9 KB","M"],["gameRules.js","10.5 KB","A"],["gameRules.test.mjs","20.2 KB","A"],["gameRules.d.ts","2.9 KB","A"],["package.json","704 B","M"]].map(f=><div key={f[0]}><i>⌘</i><span><b>{f[0]}</b><small>{f[1]}</small></span><em>{f[2]}</em></div>)}</div>}
       {tab==="Activity"&&<div className="activity-pane">{steps.map((s,i)=><article key={s.title}><time>{["13:44","13:56","13:59","14:06","14:09"][i]}</time><i className={s.state}/><div><b>{s.agent}</b><p>{s.title}</p></div></article>)}</div>}
-      {tab==="MCP"&&<ConnectorPane t={t}/>}
+      {tab==="MCP"&&<ConnectorPane t={t} states={connectorStates} onToggle={name=>setConnectorStates(s=>({...s,[name]:!s[name]}))}/>}
     </aside></>}
 
     {section==="all"&&<SimplePage eyebrow="MISSIONS" title="Work continues in parallel." body="Each mission keeps its own context, model handoffs, evidence, artifacts, and release authority."><div className="task-list"><button onClick={()=>setSection("task")}><i className="done">✓</i><span><b>{t.title}</b><small>5 agents · 34 tests · Codex PASS</small></span><em>Completed</em></button><button><i className="done">✓</i><span><b>Hello world CLI</b><small>Claude → Codex · 9 ledger events</small></span><em>Completed</em></button></div></SimplePage>}
-    {section==="agents"&&<SimplePage eyebrow="MODEL ROUTING" title="A company, not a model picker." body="Every model gets a bounded job. Review and implementation are deliberately separated."><div className="team-grid">{team.map(a=><article key={a[0]}><i>{a[3]}</i><div><small>{a[2]}</small><h3>{a[0]}</h3><p>{a[1]}</p></div><button>•••</button></article>)}</div></SimplePage>}
-    {section==="connectors"&&<SimplePage eyebrow="MCP & CONNECTORS" title="Your tools become the company’s hands." body="Connect context and actions once. Missions use only the permissions you grant."><ConnectorPane t={t}/></SimplePage>}
+    {section==="agents"&&<SimplePage eyebrow="MODEL ROUTING" title="One founder. A governed AI company." body="Auto mode assigns every stage. Manual mode lets you override it. The model that builds cannot approve its own release."><div className="routing-strip"><b>MISSION ROUTE</b><span>Kimi plans</span><i>→</i><span>Claude builds</span><i>→</i><span>Codex reviews</span><i>→</i><span>Kimi operates</span></div><div className="team-grid">{team.map(a=><article className={activeModel===a[0].toLowerCase()?"selected":""} key={a[0]}><i>{a[3]}</i><div><small>{a[2]}</small><h3>{a[0]}</h3><p>{a[1]}</p></div><button onClick={()=>{setActiveModel((a[0].toLowerCase()==="node"?"auto":a[0].toLowerCase()) as ModelId);flash(`${a[0]} selected`)}}>Use</button></article>)}</div></SimplePage>}
+    {section==="connectors"&&<SimplePage eyebrow="MCP & CONNECTORS" title="Your tools become the company’s hands." body="Connect context and actions once. Missions use only the permissions you grant."><ConnectorPane t={t} states={connectorStates} onToggle={name=>setConnectorStates(s=>({...s,[name]:!s[name]}))}/></SimplePage>}
+    {searchOpen&&<div className="modal-backdrop" onClick={()=>setSearchOpen(false)}><div className="search-modal" onClick={e=>e.stopPropagation()}><input autoFocus value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} placeholder="Search missions, files, agents…"/><div>{["Build a playable iOS game","Hello world CLI","Codex review","GitHub connector"].filter(x=>x.toLowerCase().includes(searchQuery.toLowerCase())).map(x=><button key={x} onClick={()=>{setSearchOpen(false);setSection(x.includes("GitHub")?"connectors":"task")}}>⌕ <span>{x}</span></button>)}</div></div></div>}
+    {authOpen&&<div className="modal-backdrop" onClick={()=>setAuthOpen(false)}><div className="auth-modal" onClick={e=>e.stopPropagation()}><div className="gl-orb">GL</div><h2>{signedIn?"Workspace account":"Run your company from one account"}</h2><p>{signedIn?"kokoaru-ltd is connected to this local workspace.":"Sign in to sync missions, provider connections, evidence, and releases."}</p>{signedIn?<><button className="primary" onClick={()=>setAuthOpen(false)}>Manage workspace</button><button onClick={signOut}>Sign out</button></>:<><button className="primary" onClick={signIn}>Continue with GitHub</button><button onClick={signIn}>Continue in local mode</button></>}</div></div>}
+    {notice&&<div className="toast">{notice}</div>}
     <button className="locale-switch" onClick={switchLocale}>{t.language}</button>
   </main>;
 }
 
-function ConnectorPane({t}:{t:(typeof ui)["en"]}) {
-  return <div className="connector-pane"><div className="connector-summary"><b>5</b><span>{t.connected}<small>1 requires setup</small></span><i>Healthy</i></div>{connectors.map(c=><article key={c.name}><div className="connector-icon">{c.icon}</div><div><header><b>{c.name}</b>{c.used&&<em>{t.used}</em>}</header><p>{c.detail}</p><small>{t.permissions}: {c.access}</small></div><span className={c.state}>{c.state==="connected"?"● Connected":"Connect"}</span></article>)}</div>;
+function ConnectorPane({t,states,onToggle}:{t:(typeof ui)["en"];states:Record<string,boolean>;onToggle:(name:string)=>void}) {
+  const count=Object.values(states).filter(Boolean).length;
+  return <div className="connector-pane"><div className="connector-summary"><b>{count}</b><span>{t.connected}<small>{connectors.length-count} require setup</small></span><i>{count>=4?"Healthy":"Setup required"}</i></div>{connectors.map(c=><article key={c.name}><div className="connector-icon">{c.icon}</div><div><header><b>{c.name}</b>{c.used&&<em>{t.used}</em>}</header><p>{c.detail}</p><small>{t.permissions}: {c.access}</small></div><button className={states[c.name]?"connected":"required"} onClick={()=>onToggle(c.name)}>{states[c.name]?"● Connected":"Connect"}</button></article>)}</div>;
+}
+function ModelMenu({value,onChange}:{value:ModelId;onChange:(m:ModelId)=>void}) {
+  const models:[ModelId,string,string][]=[["auto","Auto company","Routes every stage"],["codex","Codex","Architecture & review"],["claude","Claude","Implementation"],["kimi","Kimi","Product & operations"],["grok","Grok","Live research"],["gemini","Gemini","Multimodal & video"]];
+  return <div className="model-menu">{models.map(([id,name,role])=><button className={value===id?"active":""} onClick={()=>onChange(id)} key={id}><i>{id==="auto"?"GL":name[0]}</i><span><b>{name}</b><small>{role}</small></span><em>{value===id?"✓":""}</em></button>)}</div>;
 }
 function SimplePage({eyebrow,title,body,children}:{eyebrow:string;title:string;body:string;children:React.ReactNode}) {
   return <section className="simple-page"><header><small>{eyebrow}</small><h1>{title}</h1><p>{body}</p></header>{children}</section>;
