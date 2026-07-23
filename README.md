@@ -31,6 +31,10 @@ This is not another multi-model chat UI and not a claim that current AI can auto
 
 The project succeeds only if it closes these gaps through reproducible builds and measurable benchmarks. A polished demo does not count.
 
+The current external-agent and Skill research, procurement rules, differentiation,
+and implementation order are documented in
+[`docs/research/agent-skill-intelligence-2026-07.md`](docs/research/agent-skill-intelligence-2026-07.md).
+
 ## Why now?
 
 Individual models already perform valuable pieces of a studio's work. The missing layer is organizational:
