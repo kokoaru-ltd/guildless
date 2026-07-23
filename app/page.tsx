@@ -76,11 +76,22 @@ export default function Home() {
   const [searchOpen,setSearchOpen]=useState(false);
   const [searchQuery,setSearchQuery]=useState("");
   const [notice,setNotice]=useState("");
+  const [evidenceResult,setEvidenceResult]=useState<{confidence:number;releaseGate:string;warnings:string[]}|null>(null);
   const [connectorStates,setConnectorStates]=useState<Record<string,boolean>>(()=>Object.fromEntries(connectors.map(c=>[c.name,c.state==="connected"])));
   const speech=useRef<SpeechLike|null>(null);
   const t=ui[locale];
   useEffect(()=>{const saved=localStorage.getItem("guildless.locale");if(saved==="ja"||saved==="en")setLocale(saved);setSignedIn(localStorage.getItem("guildless.auth")==="1")},[]);
   useEffect(()=>()=>speech.current?.stop(),[]);
+  useEffect(()=>{
+    const candidates=[
+      {url:"https://www.reddit.com/r/ManusOfficial/",channel:"community",taskFit:.82,demonstratedQuality:.58,reproducibility:.35,maintenance:.65,manipulationRisk:.25,updatedAt:"2026-07-01",metrics:{views:180000}},
+      {url:"https://arxiv.org/abs/2310.06770",channel:"benchmark",taskFit:.93,demonstratedQuality:.94,reproducibility:1,maintenance:.8,updatedAt:"2025-08-01",metrics:{downloads:800000}},
+      {url:"https://github.com/OpenHands/OpenHands/issues",channel:"github",taskFit:.85,demonstratedQuality:.72,reproducibility:.78,maintenance:.9,updatedAt:"2026-07-20",metrics:{stars:75000}},
+      {url:"https://github.com/langchain-ai/langgraph",channel:"implementation",taskFit:.8,demonstratedQuality:.82,reproducibility:.85,maintenance:.95,updatedAt:"2026-07-10",metrics:{stars:37000},license:"MIT"},
+    ];
+    fetch("/api/evidence",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({question:"Can this mission be released with professional quality?",candidates})})
+      .then(r=>r.ok?r.json():Promise.reject()).then(setEvidenceResult).catch(()=>setEvidenceResult(null));
+  },[]);
   const switchLocale=()=>{const n=locale==="en"?"ja":"en";setLocale(n);localStorage.setItem("guildless.locale",n)};
   const submit=()=>{if(!draft.trim())return;setMessages(v=>[...v,draft.trim()]);setDraft("");setSection("task")};
   const signIn=()=>{localStorage.setItem("guildless.auth","1");setSignedIn(true);setAuthOpen(false);setNotice("Workspace connected")};
@@ -154,7 +165,7 @@ export default function Home() {
       <header><b>ENVIRONMENT</b><div><button onClick={()=>setTab("Preview")}>↗</button><button onClick={()=>setTab("Changes")}>＋</button></div></header>
       <nav>{(["Changes","Evidence","Preview","Files","Activity","MCP"] as Worktab[]).map(x=><button className={tab===x?"active":""} onClick={()=>setTab(x)} key={x}>{x}{x==="MCP"&&<i>5</i>}</button>)}</nav>
       {tab==="Changes"&&<div className="changes-pane"><header><b>Changes</b><span>+13,326 <em>−112</em></span></header><div><button onClick={()=>setTab("Files")}>▣ <span><b>2 files changed</b><small>Review implementation</small></span><em>›</em></button><button onClick={()=>flash("Branch copied")}>⑂ <span><b>agent/cross-model-production-policy</b><small>Current branch</small></span><em>⌄</em></button><button onClick={()=>flash("Ready to commit")}>○ <span><b>Commit or push</b><small>Working tree verified</small></span><em>›</em></button></div><footer><b>Information sources</b><button onClick={()=>setTab("MCP")}>⌘ MCP connectors <span>5</span></button><button onClick={()=>setTab("Preview")}>◎ Browser preview <span>Local</span></button></footer></div>}
-      {tab==="Evidence"&&<div className="evidence-pane"><header><div><small>EVIDENCE ENGINE</small><b>Why this decision?</b></div><span>4 sources</span></header><div className="evidence-score"><strong>78</strong><div><b>Decision confidence</b><small>Weighted by source type, recency, independence, and reproducibility.</small></div></div>{evidence.map(x=><article key={x.title}><header><span>{x.kind}</span><em>{x.signal}</em></header><h4>{x.title}</h4><p>{x.detail}</p><footer><span>{x.source}</span><b>{x.score}/100</b></footer></article>)}</div>}
+      {tab==="Evidence"&&<div className="evidence-pane"><header><div><small>EVIDENCE ENGINE · LIVE</small><b>Why this decision?</b></div><span>{evidenceResult?evidenceResult.releaseGate:"scoring…"}</span></header><div className="evidence-score"><strong>{evidenceResult?.confidence??"—"}</strong><div><b>Decision confidence</b><small>Calculated by the server from task fit, quality, reproducibility, maintenance, adoption, freshness, and manipulation risk.</small></div></div>{evidenceResult?.warnings?.length?<div className="evidence-warning">Release blocked: {evidenceResult.warnings.join(" · ")}</div>:null}{evidence.map(x=><article key={x.title}><header><span>{x.kind}</span><em>{x.signal}</em></header><h4>{x.title}</h4><p>{x.detail}</p><footer><span>{x.source}</span><b>{x.score}/100</b></footer></article>)}</div>}
       {tab==="Preview"&&<div className="preview-pane"><div className="preview-toolbar"><span><i/> Expo · iOS</span><button>↻</button></div><div className="preview-canvas"><MiniGame/></div><div className="deliverable"><header><span><i>✓</i><b>{t.deliverable}</b></span><em>VERIFIED</em></header><h3>NEON DRIFT</h3><p>Playable one-thumb arcade game · Expo SDK 54</p><div><span>34 tests</span><span>Commit 35f1f0d</span></div><button>Open source ↗</button></div></div>}
       {tab==="Files"&&<div className="files-pane"><header><span>guildless / apps / mobile</span></header>{[["App.tsx","24.9 KB","M"],["gameRules.js","10.5 KB","A"],["gameRules.test.mjs","20.2 KB","A"],["gameRules.d.ts","2.9 KB","A"],["package.json","704 B","M"]].map(f=><div key={f[0]}><i>⌘</i><span><b>{f[0]}</b><small>{f[1]}</small></span><em>{f[2]}</em></div>)}</div>}
       {tab==="Activity"&&<div className="activity-pane">{steps.map((s,i)=><article key={s.title}><time>{["13:44","13:56","13:59","14:06","14:09"][i]}</time><i className={s.state}/><div><b>{s.agent}</b><p>{s.title}</p></div></article>)}</div>}
