@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 
 type Locale = "en" | "ja";
 type Section = "home" | "task" | "all" | "agents" | "connectors" | "settings";
-type Worktab = "Changes" | "Preview" | "Files" | "Activity" | "MCP";
+type Worktab = "Changes" | "Evidence" | "Preview" | "Files" | "Activity" | "MCP";
 type ModelId = "auto" | "codex" | "claude" | "kimi" | "grok" | "gemini";
 type SpeechLike = { lang:string; continuous:boolean; interimResults:boolean; start():void; stop():void; onresult:((e:{results:ArrayLike<{0:{transcript:string}}>})=>void)|null; onend:(()=>void)|null; onerror:(()=>void)|null };
 declare global { interface Window { SpeechRecognition?:new()=>SpeechLike; webkitSpeechRecognition?:new()=>SpeechLike } }
@@ -33,6 +33,20 @@ const connectors = [
 
 const team = [
   ["Kimi","Product strategy","Connected","K"],["Claude","Implementation","Connected","C"],["Codex","Architecture & review","Connected","⌘"],["Node","Deterministic QA","Local","N"],["Grok","Research","Needs connection","X"],
+];
+
+const evidence = [
+  {source:"User reviews",kind:"COMMUNITY",score:61,title:"Autonomy is valued; reliability is not trusted",detail:"Public Manus reviews repeatedly praise breadth and voice-driven execution while reporting failed long tasks, fragile app builds, support delays, and unpredictable credits.",signal:"Mixed"},
+  {source:"SWE-bench",kind:"BENCHMARK",score:92,title:"Code must pass repository-level tests",detail:"Real GitHub issues and executable tests are stronger evidence than a model declaring its own code complete.",signal:"Strong"},
+  {source:"GitHub issues",kind:"FIELD DATA",score:74,title:"Skills and integrations fail in production",detail:"Open issue trackers expose loading failures, context problems, regressions, and operational gaps hidden by demos.",signal:"Useful"},
+  {source:"Independent AI review",kind:"CRITIC",score:87,title:"Builder and reviewer must be separated",detail:"A second model evaluates the artifact against a fixed rubric and cannot silently change acceptance criteria.",signal:"Strong"},
+];
+
+const experts = [
+  {name:"Conversion Director",icon:"CD",decision:"Move proof above the first CTA",why:"Review evidence shows trust and reliability dominate purchase objections.",status:"APPROVE"},
+  {name:"Product Designer",icon:"PD",decision:"Keep one primary action per viewport",why:"Reduces choice competition and makes the intended path measurable.",status:"APPROVE"},
+  {name:"Staff Engineer",icon:"SE",decision:"Reject one-shot generated architecture",why:"Requires typed boundaries, tests, observability, rollback, and ownership.",status:"REVISE"},
+  {name:"Security Lead",icon:"SL",decision:"Sandbox discovered Skills by default",why:"External instructions and model output are untrusted inputs.",status:"BLOCK"},
 ];
 
 function MiniGame() {
@@ -123,6 +137,11 @@ export default function Home() {
             <div className="agent-symbol">{step.icon}</div><div className="step-copy"><div><b>{step.title}</b><em>{step.agent}</em></div><p>{step.body}</p></div><i className="step-state">{step.state==="failed"?"!":"✓"}</i>
           </article>)}
         </div>
+        <div className="expert-council">
+          <header><div><i className="pulse"/>Expert council</div><span>4 specialists · 1 blocking objection</span></header>
+          {experts.map(x=><article key={x.name}><i>{x.icon}</i><div><b>{x.name}</b><h4>{x.decision}</h4><p>{x.why}</p></div><em className={x.status.toLowerCase()}>{x.status}</em></article>)}
+          <button onClick={()=>setTab("Evidence")}>Inspect evidence and disagreements →</button>
+        </div>
         <div className="final-answer"><div className="gl-orb small">G</div><div><b>GUILDLESS</b><h2>NEON DRIFT is ready.</h2><p>A playable Expo game is packaged with deterministic rules, haptics, pause/resume, retry, safe spawns, and a true 60-second clock.</p>
           <div className="result-chips"><span>✓ 34 / 34 tests</span><span>✓ TypeScript</span><span>✓ Codex: PASS</span><span>↗ GitHub</span></div>
         </div></div>
@@ -133,8 +152,9 @@ export default function Home() {
 
     <aside className="workstation">
       <header><b>ENVIRONMENT</b><div><button onClick={()=>setTab("Preview")}>↗</button><button onClick={()=>setTab("Changes")}>＋</button></div></header>
-      <nav>{(["Changes","Preview","Files","Activity","MCP"] as Worktab[]).map(x=><button className={tab===x?"active":""} onClick={()=>setTab(x)} key={x}>{x}{x==="MCP"&&<i>5</i>}</button>)}</nav>
+      <nav>{(["Changes","Evidence","Preview","Files","Activity","MCP"] as Worktab[]).map(x=><button className={tab===x?"active":""} onClick={()=>setTab(x)} key={x}>{x}{x==="MCP"&&<i>5</i>}</button>)}</nav>
       {tab==="Changes"&&<div className="changes-pane"><header><b>Changes</b><span>+13,326 <em>−112</em></span></header><div><button onClick={()=>setTab("Files")}>▣ <span><b>2 files changed</b><small>Review implementation</small></span><em>›</em></button><button onClick={()=>flash("Branch copied")}>⑂ <span><b>agent/cross-model-production-policy</b><small>Current branch</small></span><em>⌄</em></button><button onClick={()=>flash("Ready to commit")}>○ <span><b>Commit or push</b><small>Working tree verified</small></span><em>›</em></button></div><footer><b>Information sources</b><button onClick={()=>setTab("MCP")}>⌘ MCP connectors <span>5</span></button><button onClick={()=>setTab("Preview")}>◎ Browser preview <span>Local</span></button></footer></div>}
+      {tab==="Evidence"&&<div className="evidence-pane"><header><div><small>EVIDENCE ENGINE</small><b>Why this decision?</b></div><span>4 sources</span></header><div className="evidence-score"><strong>78</strong><div><b>Decision confidence</b><small>Weighted by source type, recency, independence, and reproducibility.</small></div></div>{evidence.map(x=><article key={x.title}><header><span>{x.kind}</span><em>{x.signal}</em></header><h4>{x.title}</h4><p>{x.detail}</p><footer><span>{x.source}</span><b>{x.score}/100</b></footer></article>)}</div>}
       {tab==="Preview"&&<div className="preview-pane"><div className="preview-toolbar"><span><i/> Expo · iOS</span><button>↻</button></div><div className="preview-canvas"><MiniGame/></div><div className="deliverable"><header><span><i>✓</i><b>{t.deliverable}</b></span><em>VERIFIED</em></header><h3>NEON DRIFT</h3><p>Playable one-thumb arcade game · Expo SDK 54</p><div><span>34 tests</span><span>Commit 35f1f0d</span></div><button>Open source ↗</button></div></div>}
       {tab==="Files"&&<div className="files-pane"><header><span>guildless / apps / mobile</span></header>{[["App.tsx","24.9 KB","M"],["gameRules.js","10.5 KB","A"],["gameRules.test.mjs","20.2 KB","A"],["gameRules.d.ts","2.9 KB","A"],["package.json","704 B","M"]].map(f=><div key={f[0]}><i>⌘</i><span><b>{f[0]}</b><small>{f[1]}</small></span><em>{f[2]}</em></div>)}</div>}
       {tab==="Activity"&&<div className="activity-pane">{steps.map((s,i)=><article key={s.title}><time>{["13:44","13:56","13:59","14:06","14:09"][i]}</time><i className={s.state}/><div><b>{s.agent}</b><p>{s.title}</p></div></article>)}</div>}
