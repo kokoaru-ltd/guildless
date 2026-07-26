@@ -31,6 +31,10 @@ This is not another multi-model chat UI and not a claim that current AI can auto
 
 The project succeeds only if it closes these gaps through reproducible builds and measurable benchmarks. A polished demo does not count.
 
+The current external-agent and Skill research, procurement rules, differentiation,
+and implementation order are documented in
+[`docs/research/agent-skill-intelligence-2026-07.md`](docs/research/agent-skill-intelligence-2026-07.md).
+
 ## Why now?
 
 Individual models already perform valuable pieces of a studio's work. The missing layer is organizational:
@@ -125,6 +129,13 @@ Generated assets only count when they are licensed, traceable, editable, integra
 
 ## Core architecture
 
+The detailed, implementation-level design is in
+[`docs/control-plane-spec.md`](docs/control-plane-spec.md). It defines durable
+execution, the event ledger, versioned work graphs, scheduling, engine routing,
+artifact/evidence contracts, independent review, authority grants, budget
+reservation, failure recovery, operations, security, and the test gates that
+must pass before the product can claim solo large-scale development.
+
 | Component | Responsibility |
 | --- | --- |
 | Mission compiler | Convert intent into milestones, tasks, dependencies, tests, and budgets |
@@ -139,6 +150,8 @@ Generated assets only count when they are licensed, traceable, editable, integra
 | Operations loop | Turn telemetry, incidents, reviews, and campaign results into new missions |
 
 More detail: [`docs/architecture.md`](docs/architecture.md)
+
+Sakana Fugu baseline tracking: [`docs/fugu-baseline.md`](docs/fugu-baseline.md)
 
 ## Safety and authority
 
@@ -194,7 +207,10 @@ The hypothesis is not validated if:
 
 ### Phase 1 — Verified software loop
 
-- [ ] Compile one mission into a dependency graph
+- [x] Compile one mission into a dependency graph
+- [x] Enforce cross-provider testing, review, and repair
+- [x] Fail closed when an independent provider is unavailable
+- [x] Block release without deterministic evidence and rollback plan
 - [ ] Run multiple coding agents in isolated git worktrees
 - [ ] Execute tests and independent review
 - [ ] Merge only passing changes
@@ -233,6 +249,17 @@ Implemented contracts live in:
 - [`core/model-registry.ts`](core/model-registry.ts)
 - [`core/production-contract.ts`](core/production-contract.ts)
 - [`docs/architecture.md`](docs/architecture.md)
+- [`orchestrator/planner.mjs`](orchestrator/planner.mjs)
+- [`orchestrator/policy.mjs`](orchestrator/policy.mjs)
+
+Generate the first cross-model production plan:
+
+```bash
+npm run guildless -- plan examples/missions/first-vertical-slice.json
+npm run guildless -- engines
+```
+
+The generated plan is rejected unless implementation, test authoring, review, and repair are separated across providers. Local builds and tests act as deterministic verifiers; model agreement alone can never release a product.
 
 ## Run locally
 
@@ -248,6 +275,18 @@ Production validation:
 ```bash
 npm run build
 ```
+
+### iPhone mission-control prototype
+
+The Expo app visualizes one-person production: mission progress, model assignment, cross-provider review, approval gates, and accepted artifacts.
+
+```bash
+cd apps/mobile
+npm install
+npm start
+```
+
+Open the QR code with Expo Go on an iPhone connected to the same network. The prototype currently uses demonstration state; it is intentionally not presented as a live orchestrator client yet.
 
 ## Contributing
 

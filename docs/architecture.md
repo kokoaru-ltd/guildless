@@ -2,6 +2,10 @@
 
 GUILDLESS separates production policy from model providers so the system improves when the model market improves.
 
+The implementation-level control-plane contract is defined in
+[control-plane-spec.md](./control-plane-spec.md). This short document is only
+the architectural summary.
+
 ## Control loop
 
 1. **Mission compiler** converts an owner directive into milestones, dependency graphs, budgets, and acceptance tests.

@@ -1,0 +1,8 @@
+{
+  "id": "first-vertical-slice",
+  "objective": "Build a production-ready account settings feature with tests, independent review, rollback evidence, and a deployable build.",
+  "budget": {
+    "currency": "JPY",
+    "maximum": 5000
+  }
+}
