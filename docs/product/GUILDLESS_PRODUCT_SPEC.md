@@ -1,7 +1,7 @@
 # GUILDLESS Product Specification
 
-Version: 0.3  
-Status: implementation contract  
+Version: 0.3
+Status: implementation contract
 Last updated: 2026-07-26
 
 ## 1. Product definition
