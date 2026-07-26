@@ -25,6 +25,9 @@ test("server-renders the Guildless expert workspace", async () => {
   assert.match(html, /ENVIRONMENT/);
   assert.match(html, /Evidence/);
   assert.match(html, /Builders cannot approve their own release/);
+  assert.match(html, /MISSION CONTRACT/);
+  assert.match(html, /Release blocked/);
+  assert.doesNotMatch(html, /All blockers closed/);
 });
 
 test("evidence API scores diverse sources and returns a release gate", async () => {

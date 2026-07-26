@@ -19,7 +19,7 @@ const steps = [
   { agent:"Claude", icon:"C", title:"Expo implementation", body:"Built the playable React Native game, touch controls, haptics, pause lifecycle, and deterministic rule module.", state:"done" },
   { agent:"Codex", icon:"⌘", title:"Independent review", body:"Rejected the build: timer drift and unsafe spawn geometry could break fairness.", state:"failed" },
   { agent:"Claude", icon:"C", title:"Corrective implementation", body:"Separated wall-clock time from physics and added adversarial spawn tests.", state:"done" },
-  { agent:"Codex", icon:"⌘", title:"Final release review", body:"All blockers closed. 34 tests passed and the release gate was approved.", state:"passed" },
+  { agent:"Codex", icon:"⌘", title:"Code release review", body:"Code and gameplay gates passed. Production authority remains blocked pending Security Skill isolation review.", state:"passed" },
 ];
 
 const connectors = [
@@ -80,6 +80,8 @@ export default function Home() {
   const [onboardingOpen,setOnboardingOpen]=useState(false);
   const [evidenceResult,setEvidenceResult]=useState<{confidence:number;releaseGate:string;warnings:string[]}|null>(null);
   const [connectorStates,setConnectorStates]=useState<Record<string,boolean>>(()=>Object.fromEntries(connectors.map(c=>[c.name,c.state==="connected"])));
+  const [contractOpen,setContractOpen]=useState(true);
+  const [approvalOpen,setApprovalOpen]=useState(false);
   const speech=useRef<SpeechLike|null>(null);
   const t=ui[locale];
   useEffect(()=>{const saved=localStorage.getItem("guildless.locale");if(saved==="ja"||saved==="en")setLocale(saved);setSignedIn(localStorage.getItem("guildless.auth")==="1");setOnboardingOpen(localStorage.getItem("guildless.onboarded")!=="1")},[]);
@@ -105,7 +107,7 @@ export default function Home() {
   return <main className="manus-shell">
     <aside className="manus-sidebar">
       <header><div className="gl-orb">GL</div><strong>GUILDLESS</strong><button aria-label="Collapse sidebar" onClick={()=>flash("Sidebar control ready")}>⌄</button></header>
-      <button className="new-task" onClick={()=>{setSection("task");setDraft("");setMessages([])}}><span>＋</span>{t.newTask}</button>
+      <button className="new-task" onClick={()=>{setSection("home");setDraft("");setMessages([])}}><span>＋</span>{t.newTask}</button>
       <nav>
         <button onClick={()=>setSearchOpen(true)}><i>⌕</i>{t.search}</button>
         <button className={section==="all"?"active":""} onClick={()=>setSection("all")}><i>⌾</i>{t.tasks}</button>
@@ -141,12 +143,18 @@ export default function Home() {
     </section>}
 
     {section==="task" && <><section className="conversation">
-      <header className="taskbar"><div><h1>{t.title}</h1><span><i/> {t.done} · 25m</span></div><div><button onClick={()=>flash("Share link copied")}>↗</button><button onClick={()=>setTab("Activity")}>•••</button></div></header>
+      <header className="taskbar"><div><h1>{t.title}</h1><span><i className="blocked-dot"/> Release blocked · security review</span></div><div><button title="Mission contract" onClick={()=>setContractOpen(v=>!v)}>◎</button><button title="Share" onClick={()=>flash("Share link copied")}>↗</button><button title="Activity" onClick={()=>setTab("Activity")}>•••</button></div></header>
       <div className="thread">
         <div className="owner-message"><div className="avatar small">KK</div><div><b>{t.owner}</b><p>Build a genuinely playable iOS game. Use Kimi for product judgment, Claude for implementation, and a separate AI for review. Do not call it done until the tests and independent gate pass.</p></div></div>
         <div className="agent-intro"><div className="gl-orb small">G</div><div><b>GUILDLESS</b><p>I’ll run this as a governed production mission. The implementer cannot approve its own work.</p></div></div>
+        {contractOpen&&<section className="mission-contract">
+          <header><div><small>MISSION CONTRACT</small><h2>Ship a verified, playable iOS game</h2></div><span>v1.2</span></header>
+          <div className="contract-metrics"><article><small>OWNER</small><b>kokoaru-ltd</b></article><article><small>BUDGET</small><b>Local + $25 cap</b></article><article><small>DEADLINE</small><b>Today · 18:00</b></article><article><small>AUTHORITY</small><b>Owner releases</b></article></div>
+          <div className="contract-body"><div><small>SUCCESS</small><p>Playable 60-second loop, deterministic rules, 34 tests, visual QA, safe rollback.</p></div><div><small>CONSTRAINTS</small><p>iOS/Expo, one-thumb controls, no self-approval, scoped external access.</p></div></div>
+          <footer><button onClick={()=>setTab("Evidence")}>4 evidence sources</button><button onClick={()=>setSection("agents")}>5 assigned specialists</button><button onClick={()=>setApprovalOpen(true)}>Review authority</button></footer>
+        </section>}
         <div className="execution-card">
-          <header><div><i className="pulse"/>Production run</div><span>5 stages · completed</span></header>
+          <header><div><i className="pulse"/>Production run</div><span>Build complete · review blocked</span></header>
           {steps.map((step,index)=><article key={step.title} className={step.state}>
             <div className="agent-symbol">{step.icon}</div><div className="step-copy"><div><b>{step.title}</b><em>{step.agent}</em></div><p>{step.body}</p></div><i className="step-state">{step.state==="failed"?"!":"✓"}</i>
           </article>)}
@@ -156,8 +164,9 @@ export default function Home() {
           {experts.map(x=><article key={x.name}><i>{x.icon}</i><div><b>{x.name}</b><h4>{x.decision}</h4><p>{x.why}</p></div><em className={x.status.toLowerCase()}>{x.status}</em></article>)}
           <button onClick={()=>setTab("Evidence")}>Inspect evidence and disagreements →</button>
         </div>
-        <div className="final-answer"><div className="gl-orb small">G</div><div><b>GUILDLESS</b><h2>NEON DRIFT is ready.</h2><p>A playable Expo game is packaged with deterministic rules, haptics, pause/resume, retry, safe spawns, and a true 60-second clock.</p>
-          <div className="result-chips"><span>✓ 34 / 34 tests</span><span>✓ TypeScript</span><span>✓ Codex: PASS</span><span>↗ GitHub</span></div>
+        <div className="final-answer release-blocked"><div className="gl-orb small">G</div><div><b>GUILDLESS</b><h2>Build verified. Release blocked.</h2><p>NEON DRIFT passed the code and gameplay gates, but the Security Lead has not approved discovered Skill isolation. The artifact is preserved; production release remains unavailable.</p>
+          <div className="result-chips"><span>✓ 34 / 34 tests</span><span>✓ Codex review</span><span>! Security BLOCK</span><span>↗ GitHub artifact</span></div>
+          <button className="resolve-blocker" onClick={()=>{setTab("Evidence");flash("Opening blocking evidence")}}>Resolve blocking evidence →</button>
         </div></div>
         {messages.map((m,i)=><div className="owner-message new-message" key={i}><div className="avatar small">KK</div><div><b>{t.owner}</b><p>{m}</p></div></div>)}
       </div>
@@ -181,6 +190,7 @@ export default function Home() {
     {section==="settings"&&<SimplePage eyebrow="SETTINGS" title="Workspace settings" body="Language, account, providers, permissions, and local execution live here—not in the work canvas."><div className="settings-card"><section><div><b>Language</b><small>Interface language</small></div><div className="segmented"><button className={locale==="en"?"active":""} onClick={()=>{setLocale("en");localStorage.setItem("guildless.locale","en")}}>English</button><button className={locale==="ja"?"active":""} onClick={()=>{setLocale("ja");localStorage.setItem("guildless.locale","ja")}}>日本語</button></div></section><section><div><b>Account</b><small>Sync missions and evidence</small></div><button onClick={()=>setAuthOpen(true)}>{signedIn?"Manage account":"Sign in"}</button></section><section><div><b>Default routing</b><small>Choose manually or let GUILDLESS assign every stage</small></div><button onClick={()=>setSection("agents")}>{activeModel==="auto"?"Auto company":activeModel.toUpperCase()} ›</button></section><section><div><b>Browser preview</b><small>Open builds inside the environment rail</small></div><button onClick={()=>{setSection("task");setTab("Preview")}}>Open preview ›</button></section><section><div><b>Onboarding</b><small>Replay the operating-contract setup</small></div><button onClick={()=>{setOnboardingStep(0);setOnboardingOpen(true)}}>Open onboarding ›</button></section></div></SimplePage>}
     {searchOpen&&<div className="modal-backdrop" onClick={()=>setSearchOpen(false)}><div className="search-modal" onClick={e=>e.stopPropagation()}><input autoFocus value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} placeholder="Search missions, files, agents…"/><div>{["Build a playable iOS game","Hello world CLI","Codex review","GitHub connector"].filter(x=>x.toLowerCase().includes(searchQuery.toLowerCase())).map(x=><button key={x} onClick={()=>{setSearchOpen(false);setSection(x.includes("GitHub")?"connectors":"task")}}>⌕ <span>{x}</span></button>)}</div></div></div>}
     {authOpen&&<div className="modal-backdrop" onClick={()=>setAuthOpen(false)}><div className="auth-modal" onClick={e=>e.stopPropagation()}><div className="gl-orb">GL</div><h2>{signedIn?"Workspace account":"Run your company from one account"}</h2><p>{signedIn?"kokoaru-ltd is connected to this local workspace.":"Sign in to sync missions, provider connections, evidence, and releases."}</p>{signedIn?<><button className="primary" onClick={()=>setAuthOpen(false)}>Manage workspace</button><button onClick={signOut}>Sign out</button></>:<><button className="primary" onClick={signIn}>Continue with GitHub</button><button onClick={signIn}>Continue in local mode</button></>}</div></div>}
+    {approvalOpen&&<div className="modal-backdrop" onClick={()=>setApprovalOpen(false)}><div className="approval-modal" onClick={e=>e.stopPropagation()}><header><div className="gl-orb">GL</div><button onClick={()=>setApprovalOpen(false)}>×</button></header><small>RELEASE AUTHORITY</small><h2>Owner approval cannot bypass a security block.</h2><p>GUILDLESS separates business authority from professional safety gates. You can change scope, replace the Skill, or request another independent review. You cannot silently mark the current artifact safe.</p><div><article><span>Build & tests</span><b>PASS</b></article><article><span>Independent code review</span><b>PASS</b></article><article><span>Security isolation</span><b className="blocked">BLOCK</b></article><article><span>Rollback plan</span><b>PASS</b></article></div><footer><button onClick={()=>{setApprovalOpen(false);setTab("Evidence")}}>Inspect blocker</button><button className="primary" onClick={()=>{setApprovalOpen(false);setSection("agents");flash("Assigning independent security reviewer")}}>Assign reviewer</button></footer></div></div>}
     {onboardingOpen&&<div className="modal-backdrop onboarding-backdrop"><div className="onboarding-modal"><header><div className="gl-orb">GL</div><span>{onboardingStep+1} of 3</span></header>{onboardingStep===0&&<section><small>DEFINE THE OUTCOME</small><h2>What should your company accomplish?</h2><p>Describe the result. GUILDLESS will assemble the specialists, models, tools, and quality gates.</p><textarea value={draft} onChange={e=>setDraft(e.target.value)} placeholder="Launch a booking product for…"/></section>}{onboardingStep===1&&<section><small>CONNECT CAPABILITIES</small><h2>Start local. Add only what the mission needs.</h2><p>Your workspace is available. Model accounts and MCP tools remain optional until an assigned specialist requires them.</p><div className="onboarding-choice selected"><i>▣</i><span><b>Local workspace</b><small>Files, terminal, browser preview</small></span><em>Connected</em></div><button className="onboarding-choice" onClick={()=>{finishOnboarding();setSection("connectors")}}><i>⌘</i><span><b>Models & MCP</b><small>Connect providers with scoped permissions</small></span><em>Optional</em></button></section>}{onboardingStep===2&&<section><small>OPERATING CONTRACT</small><h2>AI builds. Evidence releases.</h2><p>The builder cannot approve its own work. Security blockers stop release. Expensive or destructive actions still require your authority.</p><div className="contract-list"><span>✓ Independent review</span><span>✓ Permission boundaries</span><span>✓ Reproducible evidence</span><span>✓ Rollback before release</span></div></section>}<footer><button onClick={finishOnboarding}>Skip</button><span/>{onboardingStep>0&&<button onClick={()=>setOnboardingStep(v=>v-1)}>Back</button>}<button className="primary" onClick={()=>onboardingStep<2?setOnboardingStep(v=>v+1):finishOnboarding()}>{onboardingStep<2?"Continue":"Start mission"}</button></footer></div></div>}
     {notice&&<div className="toast">{notice}</div>}
   </main>;
