@@ -39,6 +39,10 @@ design tokens from `cloudflare/cloudflare-os` at a fixed commit.
   automatically; the user may edit or cancel it.
 - Retained design rule: neutral enterprise surfaces with the orange brand color
   reserved for intent, focus, and primary action.
+- Applied in the current CEO cockpit: fixed-height app shell, three-item primary
+  navigation, progress/state surfaces, one primary composer, and progressive
+  disclosure that keeps Council criticism and audit detail out of the CEO's
+  default decision path.
 
 Cloudflare OS is not shipped as a separate product or screen. These parts are
 integrated into the single Guildless CEO desk.

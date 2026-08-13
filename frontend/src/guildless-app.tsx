@@ -50,6 +50,15 @@ function stageIndex(status?: string) {
   return found < 0 ? 0 : found
 }
 
+function statusPercent(status?: string) {
+  const progress: Record<string, number> = {
+    queued: 5, researching: 15, analysis_researching: 25, analysis_proposing: 35, analysis_criticizing: 45,
+    analysis_judging: 55, cloning: 65, implementing: 80, verifying: 92, awaiting_approval: 95,
+    partial: 90, completed: 100, degraded: 100, failed: 0,
+  }
+  return status ? progress[status] ?? 10 : 0
+}
+
 export function GuildlessApp() {
   const [view, setView] = useState<View>('home')
   const [jobs, setJobs] = useState<Job[]>([])
@@ -138,7 +147,9 @@ function ExecutionView({ jobs, selectedId, onSelect, job, events, council, artif
   council: Record<string, any> | null; artifacts: Artifact[]; audit: Record<string, any> | null; onNew: () => void; onRefresh: () => void
 }) {
   const selected = jobs.find(item => item.job_id === selectedId)
-  const currentStage = stageIndex(job?.status || selected?.status)
+  const currentStatus = job?.status || selected?.status
+  const currentStage = stageIndex(currentStatus)
+  const completion = statusPercent(currentStatus)
   const decision = council?.decision || {}
   const verifiedArtifacts = artifacts.filter(item => item.exists).length
   const sourceUnchanged = audit?.verification?.source_unchanged
@@ -155,8 +166,9 @@ function ExecutionView({ jobs, selectedId, onSelect, job, events, council, artif
     <section className='grid min-h-0 gap-3 lg:grid-cols-[1.2fr_.8fr]'>
       <div className='grid min-h-0 grid-rows-[auto_1fr] gap-3'>
         <div className='rounded-[20px] border border-[#dedbd4] bg-white p-5'>
-          <div className='flex items-start justify-between gap-4'><div className='min-w-0'><p className='text-xs text-[#817d76]'>現在の仕事</p><h2 className='mt-1 line-clamp-2 text-xl font-semibold leading-7'>{selected?.objective || 'まだ仕事がありません'}</h2></div><span className='shrink-0 rounded-full bg-[#fff1e9] px-3 py-1.5 text-xs font-semibold text-[#b94b1b]'>{statusLabels[job?.status || selected?.status || ''] || '待機中'}</span></div>
-          <div className='mt-5 grid grid-cols-6 gap-2'>{workStages.map(([id, label], index) => <div key={id} className='min-w-0'><div className={`h-1.5 rounded-full ${index <= currentStage ? 'bg-[#ff6b32]' : 'bg-[#e8e5df]'}`} /><p className={`mt-2 truncate text-center text-[10px] ${index === currentStage ? 'font-semibold text-[#171513]' : 'text-[#99958d]'}`}>{label}</p></div>)}</div>
+          <div className='flex items-start justify-between gap-4'><div className='min-w-0'><p className='text-xs text-[#817d76]'>現在の仕事</p><h2 className='mt-1 line-clamp-2 text-xl font-semibold leading-7'>{selected?.objective || 'まだ仕事がありません'}</h2></div><span className='shrink-0 rounded-full bg-[#fff1e9] px-3 py-1.5 text-xs font-semibold text-[#b94b1b]'>完成まで {completion}% · {statusLabels[currentStatus || ''] || '待機中'}</span></div>
+          <div className='mt-4 h-2 overflow-hidden rounded-full bg-[#ece9e3]'><div className='h-full rounded-full bg-[#ff6b32]' style={{ width: `${completion}%` }} /></div>
+          <div className='mt-4 grid grid-cols-6 gap-2'>{workStages.map(([id, label], index) => <div key={id} className='min-w-0'><p className={`truncate text-center text-[10px] ${index === currentStage ? 'font-semibold text-[#171513]' : 'text-[#99958d]'}`}>{label}</p></div>)}</div>
         </div>
 
         <div className='grid min-h-0 gap-3 md:grid-cols-2'>
