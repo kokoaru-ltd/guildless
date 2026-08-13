@@ -246,7 +246,7 @@ async def test_ui_and_job_history_include_cli_completed_job(tmp_path: Path) -> N
         script_path = re.search(r'src="([^"]+\.js)"', page.text).group(1)
         script = await client.get(script_path)
         assert script.status_code == 200
-        assert "オペレーション" in script.text
+        assert "Guildlessはいま何をしているか" in script.text
         history = (await client.get("/v1/guildless/jobs")).json()
         assert history["jobs"][0]["objective"] == "TypeScriptの試作品を作る"
         detail = (await client.get(f"/v1/guildless/jobs/{job_dir.name}")).json()
