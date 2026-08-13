@@ -1,44 +1,58 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
-
-# dependencies
-/node_modules
-/node_modules_incomplete
-/.dev-*.log
-/.pnp
-.pnp.*
-.yarn/*
-!.yarn/patches
-!.yarn/plugins
-!.yarn/releases
-!.yarn/versions
-
-# testing
-/coverage
-
-# next.js
-/.next/
-/.vinext/
-/out/
-
-# misc
+.env
+.env.*
+!.env.example
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+.runtime/
+runs/
+dist/
+frontend/dist/
+frontend/node_modules/
+frontend/.github/
+frontend/.vscode/
+frontend/CHANGELOG.md
+frontend/README.md
+frontend/netlify.toml
+frontend/src/assets/
+frontend/src/config/
+frontend/src/context/
+frontend/src/features/
+frontend/src/hooks/
+frontend/src/routes/
+frontend/src/stores/
+frontend/src/test-utils/
+frontend/src/routeTree.gen.ts
+frontend/src/tanstack-table.d.ts
+frontend/src/components/data-table/
+frontend/src/components/layout/
+frontend/src/components/coming-soon.tsx
+frontend/src/components/command-menu.tsx
+frontend/src/components/config-drawer*
+frontend/src/components/confirm-dialog*
+frontend/src/components/date-picker.tsx
+frontend/src/components/learn-more.tsx
+frontend/src/components/long-text.tsx
+frontend/src/components/navigation-progress.tsx
+frontend/src/components/password-input*
+frontend/src/components/profile-dropdown.tsx
+frontend/src/components/search.tsx
+frontend/src/components/select-dropdown.tsx
+frontend/src/components/sign-out-dialog*
+frontend/src/components/skip-to-main.tsx
+frontend/src/components/theme-switch.tsx
+frontend/src/components/ui/*
+!frontend/src/components/ui/button.tsx
+!frontend/src/components/ui/card.tsx
+frontend/src/lib/*
+!frontend/src/lib/utils.ts
+frontend/public/images/
+node_modules/
+third_party/faster-whisper/
+*.egg-info/
+*.log
+.coverage
+htmlcov/
 .DS_Store
-*.pem
-
-# debug
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-.pnpm-debug.log*
-
-# env files (can opt-in for committing if needed)
-.env*
-
-# vercel
-.vercel
-
-# typescript
-next-env.d.ts
-/dist/
-/.wrangler/
-/outputs/
-/work/
+Thumbs.db

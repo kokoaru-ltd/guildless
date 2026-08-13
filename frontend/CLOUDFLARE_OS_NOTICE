@@ -1,0 +1,10 @@
+Cloudflare OS
+Copyright Cloudflare, Inc.
+
+Source: https://github.com/cloudflare/cloudflare-os
+Fixed source commit: c04843f97cd07a8c869312058fc59a00b5d5b5cb
+
+Guildless adapts the HomeTaskSuggestions interaction pattern, SectionEyebrow
+presentation pattern, and selected semantic UI tokens under the Apache License,
+Version 2.0. The derived implementation is identified in UI_SOURCES.md and
+THIRD_PARTY_NOTICES.md.

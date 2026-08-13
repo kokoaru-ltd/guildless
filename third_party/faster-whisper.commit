@@ -1,0 +1,4 @@
+repository=https://github.com/SYSTRAN/faster-whisper
+release=v1.2.1
+commit=65882eee9f5cdbeeb2d877f1131d48cf241b327d
+license=MIT
