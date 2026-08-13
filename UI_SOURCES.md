@@ -21,6 +21,16 @@ Guildless uses the TypeScript/Vite/shadcn component base from
 - Referenced boundary: operational list/detail/activity information hierarchy
 - No Atomic CRM source module is bundled into the Guildless runtime.
 
+### Paperclip company dashboard
+
+- Repository: https://github.com/paperclipai/paperclip
+- Commit: `19be4cf9278b70bc151063778a94bf38bfd5c903`
+- License: MIT
+- Inspected source: `ui/src/pages/Dashboard.tsx`
+- Adopted structure: compact company indicators, one active-work summary,
+  approvals, recent work and progressive disclosure instead of model-centric
+  cards. Guildless implements this structure independently in its own UI.
+
 ## Cloudflare OS UI source
 
 Guildless now directly adapts selected home-composer interaction and semantic

@@ -133,7 +133,7 @@ export function GuildlessApp() {
 
       <main className='mx-auto h-[calc(100svh-4rem)] max-w-[1480px] overflow-hidden p-4 lg:p-7'>
         {error && <div className='absolute right-5 top-20 z-20 flex max-w-lg items-center gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-700 shadow-lg'><span className='line-clamp-2'>{error}</span><button onClick={() => setError('')} aria-label='エラーを閉じる'><X className='size-4' /></button></div>}
-        {view === 'home' && <CeoHome jobs={jobs} selectedJob={job} onDelegate={objective => { setDelegateObjective(objective || ''); setCreateOpen(true) }} />}
+        {view === 'home' && <CeoHome jobs={jobs} selectedJob={job} />}
         {view === 'growth' && <SalesMarketingView />}
         {view === 'work' && <ExecutionView jobs={jobs} selectedId={selectedId} onSelect={setSelectedId} job={job} events={events} council={council} artifacts={artifacts} audit={audit} onNew={() => { setDelegateObjective(''); setCreateOpen(true) }} onRefresh={refresh} />}
       </main>

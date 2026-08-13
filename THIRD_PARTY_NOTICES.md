@@ -36,6 +36,19 @@ The Cloudflare OS copyright and Apache License 2.0 terms remain applicable to
 these derived portions. A complete copy of the license is included at
 `frontend/CLOUDFLARE_OS_LICENSE`.
 
+## Paperclip dashboard design reference
+
+The Guildless company overview information hierarchy was adapted from the
+Paperclip company dashboard at fixed commit
+`19be4cf9278b70bc151063778a94bf38bfd5c903`.
+
+- Source: https://github.com/paperclipai/paperclip
+- License: MIT
+- Copyright (c) 2025 Paperclip AI
+- Inspected file: `ui/src/pages/Dashboard.tsx`
+- Reused boundary: company metrics, active work, approvals, and recent work
+  information hierarchy. No Paperclip runtime is bundled in Guildless.
+
 ## LangGraph
 
 This product uses LangGraph 1.2.9.
