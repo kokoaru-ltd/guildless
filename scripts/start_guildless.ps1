@@ -14,6 +14,13 @@ Set-Location $projectRoot
 $env:PAPERCLIP_TELEMETRY_DISABLED = "1"
 $env:DO_NOT_TRACK = "1"
 
+if (Test-Path -LiteralPath (Join-Path $projectRoot ".gitmodules")) {
+    git -C $projectRoot submodule update --init --recursive
+    if ($LASTEXITCODE -ne 0) {
+        throw "Sales and marketing OSS setup failed. Check Git access and run the script again."
+    }
+}
+
 if (-not (Test-Path -LiteralPath $venvPython)) {
     $pythonCommand = Get-Command python -ErrorAction SilentlyContinue
     if (-not $pythonCommand) {

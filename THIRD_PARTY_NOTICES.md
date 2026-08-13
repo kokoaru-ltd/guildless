@@ -70,3 +70,17 @@ The following repositories were inspected but no source code was copied into thi
 - arbgjr/multi-agent-debate (`0ca74a53aeaa28cbb772c5fd5c430fd7e5bb0d89`)
 - am-will/llm-council (`e4a756a28e1d98efdd592ff09f7a6fd966d9122c`)
 - danielrosehill/Awesome-LLM-Council-Projects (`f21edd27d4eab758098d841cd87d8de530af94bd`)
+
+## Sales and marketing OSS packs
+
+Guildless loads the following projects as fixed Git submodules. Their code remains in
+the upstream repositories and is connected through the read-only `SalesOssRegistry`.
+
+- `iPythoning/b2b-sdr-agent-template` at `e71bfd4da4a56153ab5ef05a4bd684d370b8c90c` — MIT — pipeline and heartbeat rules
+- `zubair-trabzada/ai-sales-team-claude` at `efef8b8a4ce8c93d8d6b4af9d1423db38f0de2ce` — MIT — BANT/MEDDIC lead scorer
+- `filip-michalsky/SalesGPT` at `7cd1d4f9fae2a5610fac76e1c0edc38a2fafd388` — MIT — conversation stages
+- `gtm-skills/gtm` at `6e42775af8900c1a98669db2a6ad2943132b8ac3` — MIT — Scout/Rep/Closer/Writer skills
+
+Guildless does not enable these projects' outbound messaging, mailbox, LinkedIn,
+contract, or payment integrations. The common Guildless approval policy wins over
+upstream automation instructions.

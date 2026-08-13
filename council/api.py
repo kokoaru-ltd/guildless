@@ -18,11 +18,13 @@ from council.autonomous import GuildlessAutonomousRunner
 from council.config import Settings
 from council.guildless import GuildlessOrchestrator
 from council.orchestrator import CouncilOrchestrator
+from council.sales_oss import SalesOssError, SalesOssRegistry
 from council.schemas import (
     CouncilRunAccepted,
     CouncilRunRequest,
     GuildlessJobRequest,
     GuildlessRunRequest,
+    SalesLeadScoreRequest,
 )
 from council.security import COUNCIL_ROOT, validate_output_root
 from council.storage import write_json
@@ -589,6 +591,7 @@ def create_app(
     orchestrator_factory: Callable[[Settings], CouncilOrchestrator] | None = None,
     guildless_orchestrator_factory: Callable[[Settings], GuildlessOrchestrator] | None = None,
     voice_transcriber: Any | None = None,
+    sales_registry: SalesOssRegistry | None = None,
 ) -> FastAPI:
     app = FastAPI(title="Council Service", version="1.0.0")
     app.mount("/ui-assets", StaticFiles(directory=UI_ROOT), name="guildless-ui-assets")
@@ -607,11 +610,26 @@ def create_app(
     job_manager = GuildlessJobManager(settings or manager.settings, output_boundary=output_boundary)
     app.state.guildless_job_manager = job_manager
     app.state.voice_transcriber = voice_transcriber or LocalWhisperTranscriber()
+    app.state.sales_registry = sales_registry or SalesOssRegistry()
 
     @app.get("/", include_in_schema=False)
     @app.get("/guildless", include_in_schema=False)
     async def guildless_ui() -> FileResponse:
         return FileResponse(UI_ROOT / "index.html")
+
+    @app.get("/v1/sales/overview")
+    async def sales_overview() -> dict[str, Any]:
+        try:
+            return app.state.sales_registry.overview()
+        except SalesOssError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    @app.post("/v1/sales/score")
+    async def sales_score(request: SalesLeadScoreRequest) -> dict[str, Any]:
+        try:
+            return app.state.sales_registry.score_lead(request.model_dump(mode="json"))
+        except SalesOssError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     @app.get("/v1/audio/transcriptions/status")
     async def transcription_status() -> dict:

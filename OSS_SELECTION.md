@@ -4,6 +4,19 @@
 
 ## 採用
 
+### Sales / Marketing packs
+
+営業・マーケ機能は独自の仮ロジックではなく、次のMIT OSSを固定commitのGit submoduleとして利用する。Guildlessは共通APIとShadow Modeの承認境界だけを担当する。
+
+| Repository | Fixed commit | Guildlessで使う部分 |
+|---|---|---|
+| `iPythoning/b2b-sdr-agent-template` | `e71bfd4da4a56153ab5ef05a4bd684d370b8c90c` | 10段階の営業パイプライン、14件の定期確認 |
+| `zubair-trabzada/ai-sales-team-claude` | `efef8b8a4ce8c93d8d6b4af9d1423db38f0de2ce` | BANT/MEDDIC採点スクリプト |
+| `filip-michalsky/SalesGPT` | `7cd1d4f9fae2a5610fac76e1c0edc38a2fafd388` | 8段階の会話状態 |
+| `gtm-skills/gtm` | `6e42775af8900c1a98669db2a6ad2943132b8ac3` | Scout / Rep / Closer / Writer のGTM Skill |
+
+上流コードは変更しない。外部メール、LinkedIn、契約、支払いは接続せず、採点と下書きの直前で停止する。
+
 ### LangGraph
 
 - Repository: https://github.com/langchain-ai/langgraph

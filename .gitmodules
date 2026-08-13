@@ -1,0 +1,12 @@
+[submodule "third_party/sales/b2b-sdr-agent-template"]
+	path = third_party/sales/b2b-sdr-agent-template
+	url = https://github.com/iPythoning/b2b-sdr-agent-template.git
+[submodule "third_party/sales/ai-sales-team-claude"]
+	path = third_party/sales/ai-sales-team-claude
+	url = https://github.com/zubair-trabzada/ai-sales-team-claude.git
+[submodule "third_party/sales/SalesGPT"]
+	path = third_party/sales/SalesGPT
+	url = https://github.com/filip-michalsky/SalesGPT.git
+[submodule "third_party/sales/gtm"]
+	path = third_party/sales/gtm
+	url = https://github.com/gtm-skills/gtm.git

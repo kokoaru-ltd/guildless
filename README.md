@@ -4,7 +4,7 @@
 
 Guildlessは、経営者の相談を整理し、必要なOSSをGitHubから調査し、複数AIの意見を比較し、成果物の実在まで検証します。モデル名や実行ログを主役にせず、経営者が最初に見るべき「判断待ち・対応中・完了」を中心に表示します。
 
-![Guildless CEO Desk](docs/assets/guildless-ceo-desk.png)
+![Guildless CEO Desk](docs/assets/guildless-one-screen.png)
 
 ## 現在できること
 
@@ -15,6 +15,7 @@ Guildlessは、経営者の相談を整理し、必要なOSSをGitHubから調�
 - **音声入力**: ブラウザ録音をローカルWhisperで文字起こし
 - **監査**: provider、token、latency、根拠、状態遷移、外部作用を保存
 - **安全停止**: Council出力は候補のまま保存し、確定方針へ自動昇格しない
+- **営業・マーケ**: 4つのMIT OSSから営業段階、BANT/MEDDIC、会話分類、GTMチームを直接利用
 
 ## 1コマンド起動（Windows）
 
@@ -33,6 +34,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\start_guildless.ps1
 ```
 
 初回はPythonとUI依存関係を準備してから、`http://127.0.0.1:8780/guildless` を開きます。終了は起動したターミナルで `Ctrl+C` です。
+営業・マーケOSSはGit submoduleとして固定commitを取得するため、初回起動時に自動セットアップされます。採用箇所と安全境界は [SALES_OSS_INTEGRATION.md](SALES_OSS_INTEGRATION.md) に記録しています。
 
 2回目以降、依存関係を変更していない場合:
 
@@ -73,6 +75,8 @@ UIとCLIは同じorchestratorを使います。
 - `GET /v1/council/runs/{run_id}/events`
 - `POST /v1/guildless/runs`
 - `POST /v1/audio/transcriptions`
+- `GET /v1/sales/overview`
+- `POST /v1/sales/score`
 
 詳しくは [HTTP_API.md](HTTP_API.md) と [AUTONOMOUS_JOBS.md](AUTONOMOUS_JOBS.md) を参照してください。
 

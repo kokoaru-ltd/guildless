@@ -82,6 +82,14 @@ class CouncilRunAccepted(StrictModel):
     events_url: str
 
 
+class SalesLeadScoreRequest(StrictModel):
+    company: str = Field(min_length=1, max_length=500)
+    budget_signals: dict[str, Any] = Field(default_factory=dict)
+    authority_signals: dict[str, Any] = Field(default_factory=dict)
+    need_signals: dict[str, Any] = Field(default_factory=dict)
+    timeline_signals: dict[str, Any] = Field(default_factory=dict)
+
+
 class CouncilRunEvent(StrictModel):
     sequence: int
     run_id: str

@@ -30,6 +30,10 @@
   "include": [
     "src/main.tsx",
     "src/guildless-app.tsx",
+    "src/ceo-home.tsx",
+    "src/sales-marketing-view.tsx",
+    "src/cloudflare-os/home-task-suggestions.tsx",
+    "src/components/guildless-mark.tsx",
     "src/vite-env.d.ts",
     "src/components/ui/button.tsx",
     "src/components/ui/card.tsx",

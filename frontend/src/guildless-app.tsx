@@ -18,6 +18,7 @@ import {
   LayoutDashboard,
   LoaderCircle,
   Menu,
+  Megaphone,
   PanelLeftClose,
   PanelLeftOpen,
   Play,
@@ -33,8 +34,9 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { CeoHome } from '@/ceo-home'
 import { GuildlessMark } from '@/components/guildless-mark'
+import { SalesMarketingView } from '@/sales-marketing-view'
 
-type View = 'home' | 'operations' | 'council' | 'artifacts' | 'audit'
+type View = 'home' | 'growth' | 'operations' | 'council' | 'artifacts' | 'audit'
 type Job = {
   job_id: string
   status: string
@@ -59,6 +61,7 @@ type Artifact = { path: string; exists: boolean; size: number; sha256?: string; 
 
 const navItems: Array<{ id: View; label: string; description: string; icon: typeof LayoutDashboard }> = [
   { id: 'home', label: '経営デスク', description: '話す・考える・決める', icon: Home },
+  { id: 'growth', label: '営業・マーケ', description: '売上を作る', icon: Megaphone },
   { id: 'council', label: '経営会議', description: '複数の視点で比較', icon: UsersRound },
   { id: 'operations', label: '仕事の状況', description: 'オペレーション詳細', icon: LayoutDashboard },
   { id: 'artifacts', label: '成果物', description: '作ったものを確認', icon: Archive },
@@ -125,7 +128,7 @@ export function GuildlessApp() {
   const [createOpen, setCreateOpen] = useState(false)
   const [delegateObjective, setDelegateObjective] = useState('')
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem('guildless.sidebarCollapsed') === 'true')
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem('guildless.sidebarCollapsed') !== 'false')
   const [artifact, setArtifact] = useState<Artifact | null>(null)
   const [councilTab, setCouncilTab] = useState<'decision' | 'proposals' | 'criticism'>('decision')
 
@@ -170,8 +173,13 @@ export function GuildlessApp() {
 
   const selectedSummary = jobs.find(item => item.job_id === selectedId)
   const pageTitle = navItems.find(item => item.id === view)?.label || 'Guildless'
+  const pageSubtitle = view === 'home'
+    ? '会社を考え、決め、任せる場所'
+    : view === 'growth'
+      ? '既存OSSで売上づくりを進める'
+      : selectedSummary?.objective || '仕事を選択してください'
 
-  return <div className='min-h-screen bg-[#f7f7f5] text-[#20201e]'>
+  return <div className='h-svh overflow-hidden bg-[#f7f7f5] text-[#20201e]'>
     {sidebarOpen && <button className='fixed inset-0 z-30 bg-black/25 backdrop-blur-[1px] lg:hidden' onClick={() => setSidebarOpen(false)} aria-label='サイドバーを閉じる' />}
     <aside className={`fixed inset-y-0 left-0 z-40 flex w-72 flex-col border-r border-[#e6e5e1] bg-white transition-[width,transform] duration-200 lg:translate-x-0 ${sidebarCollapsed ? 'lg:w-[76px]' : 'lg:w-64'} ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
       <div className={`flex h-16 items-center border-b ${sidebarCollapsed ? 'lg:justify-center lg:px-3' : 'justify-between px-5'}`}>
@@ -206,14 +214,17 @@ export function GuildlessApp() {
     <div className={`transition-[padding] duration-200 ${sidebarCollapsed ? 'lg:pl-[76px]' : 'lg:pl-64'}`}>
       <header className='sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-[#e6e5e1] bg-white/95 px-4 backdrop-blur lg:px-8'>
         <button className='rounded-md p-2 hover:bg-muted lg:hidden' onClick={() => setSidebarOpen(true)} aria-label='メニューを開く'><Menu className='size-5' /></button>
-        <div className='min-w-0 flex-1'><p className='truncate text-sm font-semibold'>{pageTitle}</p><p className='truncate text-xs text-muted-foreground'>{view === 'home' ? '会社を考え、決め、任せる場所' : selectedSummary ? selectedSummary.objective : '仕事を選択してください'}</p></div>
-        <Button variant='outline' size='sm' onClick={refresh} disabled={loading}><RefreshCw className={`size-4 ${loading ? 'animate-spin' : ''}`} />更新</Button>
-        <Button size='sm' className='bg-[#171716] text-white hover:bg-black' onClick={() => { setDelegateObjective(''); setCreateOpen(true) }}><Plus className='size-4' />仕事を任せる</Button>
+        <div className='min-w-0 flex-1'><p className='truncate text-sm font-semibold'>{pageTitle}</p><p className='truncate text-xs text-muted-foreground'>{pageSubtitle}</p></div>
+        {view !== 'home' && view !== 'growth' && <>
+          <Button variant='outline' size='sm' onClick={refresh} disabled={loading}><RefreshCw className={`size-4 ${loading ? 'animate-spin' : ''}`} />更新</Button>
+          <Button size='sm' className='bg-[#171716] text-white hover:bg-black' onClick={() => { setDelegateObjective(''); setCreateOpen(true) }}><Plus className='size-4' />仕事を任せる</Button>
+        </>}
       </header>
 
-      <main className='mx-auto max-w-[1480px] p-4 lg:p-8'>
+      <main className={`mx-auto h-[calc(100svh-4rem)] max-w-[1480px] p-4 lg:p-8 ${view === 'home' || view === 'growth' ? 'overflow-hidden' : 'overflow-auto'}`}>
         {error && <div className='mb-5 flex items-center justify-between rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700'><span>{error}</span><button onClick={() => setError('')}><X className='size-4' /></button></div>}
-        {view === 'home' && <CeoHome jobs={jobs} selectedJob={job} onOpenOperations={() => setView('operations')} onOpenCouncil={() => setView('council')} onDelegate={(objective) => { setDelegateObjective(objective || ''); setCreateOpen(true) }} />}
+        {view === 'home' && <CeoHome jobs={jobs} selectedJob={job} onOpenCouncil={() => setView('council')} onDelegate={(objective) => { setDelegateObjective(objective || ''); setCreateOpen(true) }} />}
+        {view === 'growth' && <SalesMarketingView />}
         {view === 'operations' && <Operations jobs={jobs} selectedId={selectedId} onSelect={setSelectedId} job={job} events={events} onCreate={() => { setDelegateObjective(''); setCreateOpen(true) }} />}
         {view === 'council' && <CouncilView council={council} job={job} tab={councilTab} setTab={setCouncilTab} />}
         {view === 'artifacts' && <ArtifactsView artifacts={artifacts} job={job} onOpen={setArtifact} />}
