@@ -4,7 +4,7 @@ Guildlessの営業・マーケ機能は、既存OSSを固定commitで再利用�
 
 ## 実行経路
 
-1. `git submodule update --init --recursive` で4つのMIT OSSを固定取得する。
+1. `git submodule update --init` で4つのMIT OSSを固定取得する。SalesGPT内の未使用な古い入れ子submoduleは取得しない。
 2. `SalesOssRegistry` が上流ファイルを読み取り専用で解析する。
 3. `/v1/sales/overview` が営業10段階、定期確認14件、会話8段階、GTM 4役をUIへ返す。
 4. `/v1/sales/score` は `ai-sales-team-claude/scripts/lead_scorer.py` を別プロセスでそのまま実行する。
