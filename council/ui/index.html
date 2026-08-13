@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Guildless — Command Center</title>
+  <link rel="stylesheet" href="/ui-assets/styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></div>
+        <div><strong>Guildless</strong><small>COMMAND CENTER</small></div>
+      </div>
+
+      <nav class="nav" aria-label="メインナビゲーション">
+        <button class="nav-item is-active" type="button" data-view="operations">
+          <span class="nav-icon">⌁</span><span>オペレーション</span>
+        </button>
+        <button class="nav-item" type="button" data-view="council">
+          <span class="nav-icon">◎</span><span>Council</span>
+        </button>
+        <button class="nav-item" type="button" data-view="artifacts">
+          <span class="nav-icon">◇</span><span>成果物</span>
+        </button>
+        <button class="nav-item" type="button" data-view="audit">
+          <span class="nav-icon">✓</span><span>監査ログ</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-bottom">
+        <div class="safety-card">
+          <div class="safety-title"><span class="shield">✓</span> Safety Gate</div>
+          <p>外部送信・公開・決済は<br>承認まで停止します。</p>
+          <div class="safety-row"><span>外部作用</span><strong>0</strong></div>
+        </div>
+        <div class="host-status"><span class="status-dot"></span><span>LOCAL HOST</span><strong>ONLINE</strong></div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">AI COMPANY OPERATIONS</p>
+          <h1>会社を動かす指示を出す</h1>
+        </div>
+        <div class="top-actions">
+          <div class="clock" id="clock">--:--</div>
+          <button class="icon-button" id="refreshButton" type="button" aria-label="更新">↻</button>
+        </div>
+      </header>
+
+      <section class="command-card">
+        <form id="jobForm">
+          <label for="objective">Guildlessへの指示</label>
+          <div class="command-row">
+            <textarea id="objective" name="objective" rows="2" required
+              placeholder="例：営業支援OSSを調査し、安全なローカル試作品を実装してテストまで完了する"></textarea>
+            <button class="run-button" id="runButton" type="submit">
+              <span class="run-icon">▶</span><span>実行する</span>
+            </button>
+          </div>
+          <div class="command-options">
+            <div class="field compact-field">
+              <label for="githubQueries">GitHub検索語（1行1件）</label>
+              <textarea id="githubQueries" rows="2">multi agent orchestration typescript
+autonomous company agent framework</textarea>
+            </div>
+            <fieldset class="provider-field">
+              <legend>参加する知能</legend>
+              <label class="check"><input type="checkbox" name="provider" value="claude" checked><span>Claude</span></label>
+              <label class="check"><input type="checkbox" name="provider" value="codex" checked><span>Codex</span></label>
+              <label class="check"><input type="checkbox" name="provider" value="deepseek"><span>DeepSeek</span></label>
+            </fieldset>
+          </div>
+          <p class="form-message" id="formMessage" role="status"></p>
+        </form>
+      </section>
+
+      <section class="active-run" aria-labelledby="activeRunTitle">
+        <div class="section-heading">
+          <div>
+            <p class="section-kicker">ACTIVE OPERATION</p>
+            <h2 id="activeRunTitle">現在の実行</h2>
+          </div>
+          <span class="status-badge is-idle" id="runStatus"><span></span>待機中</span>
+        </div>
+
+        <div class="run-summary">
+          <div class="run-identity">
+            <span class="run-label">OBJECTIVE</span>
+            <strong id="currentObjective">指示を入力すると、ここに実行状況が表示されます。</strong>
+            <code id="currentJobId">NO ACTIVE JOB</code>
+          </div>
+          <div class="metric"><span>選定OSS</span><strong id="repoMetric">—</strong></div>
+          <div class="metric"><span>テスト合格</span><strong id="testMetric">0</strong></div>
+          <div class="metric"><span>成果物</span><strong id="fileMetric">0</strong></div>
+          <div class="metric safe"><span>外部作用</span><strong id="effectMetric">0</strong></div>
+        </div>
+
+        <div class="pipeline" id="pipeline">
+          <div class="stage" data-stage="research"><span class="stage-number">01</span><i></i><b>探索</b><small>GitHub候補</small></div>
+          <div class="stage-line"></div>
+          <div class="stage" data-stage="council"><span class="stage-number">02</span><i></i><b>Council</b><small>独立提案と反論</small></div>
+          <div class="stage-line"></div>
+          <div class="stage" data-stage="select"><span class="stage-number">03</span><i></i><b>選定</b><small>固定コミット</small></div>
+          <div class="stage-line"></div>
+          <div class="stage" data-stage="implement"><span class="stage-number">04</span><i></i><b>実装</b><small>Action Agent</small></div>
+          <div class="stage-line"></div>
+          <div class="stage" data-stage="verify"><span class="stage-number">05</span><i></i><b>検証</b><small>テスト・修正</small></div>
+          <div class="stage-line"></div>
+          <div class="stage" data-stage="complete"><span class="stage-number">06</span><i></i><b>完了</b><small>監査記録</small></div>
+        </div>
+      </section>
+
+      <div class="content-grid">
+        <section class="panel activity-panel">
+          <div class="panel-heading"><div><span>LIVE FEED</span><h3>実行ログ</h3></div><span class="live-label"><i></i>LIVE</span></div>
+          <div class="activity-list" id="activityList">
+            <div class="empty-state"><span>⌁</span><p>ジョブを選択すると<br>処理の流れが表示されます。</p></div>
+          </div>
+        </section>
+
+        <section class="panel inspector-panel">
+          <div class="panel-heading"><div><span>RESULT</span><h3>Guildlessの仕事</h3></div></div>
+          <div id="resultInspector" class="result-inspector">
+            <div class="empty-state"><span>◇</span><p>成果と判断理由を<br>ここで確認できます。</p></div>
+          </div>
+        </section>
+      </div>
+
+      <section class="panel history-panel">
+        <div class="panel-heading"><div><span>OPERATION HISTORY</span><h3>最近の仕事</h3></div><button id="historyRefresh" class="text-button" type="button">更新</button></div>
+        <div class="job-list" id="jobList"><div class="loading-line"></div></div>
+      </section>
+    </main>
+  </div>
+  <script src="/ui-assets/app.js" defer></script>
+</body>
+</html>
