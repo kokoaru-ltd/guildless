@@ -66,3 +66,4 @@ _final_*.png
 # Live wallet and payment state. Never commit; these are the company books.
 runs/capital.json
 runs/payments.json
+runs/delivery_proof/
