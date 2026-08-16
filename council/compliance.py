@@ -38,11 +38,17 @@ class ChannelRule:
 RULES: dict[str, ChannelRule] = {
     "contact_form": ChannelRule(
         "contact_form",
-        "allowed",
-        "公開された問い合わせフォームへの営業は特定電子メール法の規制対象外。"
-        "ただし各サイトの利用規約と営業お断り表記に従う。",
+        # Not unconditional. A form is outside the opt-in rule for advertising
+        # email, but a stated purpose -- recruitment, existing customers,
+        # support -- or an explicit refusal of sales approaches makes it
+        # unusable regardless. Each target is inspected before submission.
+        "conditional",
+        "公開フォームへの営業は特定電子メール法の「電子メール」とは扱いが異なるが、"
+        "フォーム側に営業禁止・用途限定の記載がある場合は使用しない。",
         conditions=(
-            "営業お断りの表記があるサイトを除外する",
+            "送信前に各サイトの営業禁止・用途限定の記載を確認する",
+            "採用・サポート・報道など用途が限定されたフォームには送らない",
+            "CAPTCHA・ログイン・bot対策があるサイトは突破せず除外する",
             "送信者の氏名・連絡先を明記する",
             "1社あたり1回、再送は返信があった場合のみ",
         ),
@@ -51,10 +57,11 @@ RULES: dict[str, ChannelRule] = {
     "email_cold": ChannelRule(
         "email_cold",
         "conditional",
-        "特定電子メール法はオプトイン原則。法人の公開アドレスは適用除外だが、"
-        "送信者表示義務と受信拒否手段の提供は必須。",
+        "特定電子メール法はオプトイン原則。法人等が自ら公表しているアドレスは"
+        "例外になり得るが、「広告メール拒否」等の表示があれば例外は成立しない。",
         conditions=(
             "法人が自ら公開しているアドレスに限る",
+            "「広告メール等は送信しないでください」等の表示があるアドレスは除外する",
             "個人アドレスには送らない",
             "送信者名・住所・連絡先・受信拒否方法を本文に明記する",
             "受信拒否後は再送しない",

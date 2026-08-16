@@ -26,6 +26,18 @@ VANITY_PATTERNS: tuple[str, ...] = (
     "better architecture", "cleanup", "refactor", "future-proof", "generalise",
 )
 
+#: The boundary the system may never edit. A company that can widen its own
+#: permissions, raise its own spending limits, or reclassify work a person is
+#: legally required to do has no limits at all -- and every guarantee above
+#: rests on these staying beyond reach.
+PROTECTED_MODULES: frozenset[str] = frozenset({
+    "council/grant.py",
+    "council/human_role.py",
+    "council/capital.py",
+    "council/gates.py",
+    "council/self_modification.py",
+})
+
 
 @dataclass
 class ModificationRequest:
@@ -34,6 +46,8 @@ class ModificationRequest:
     rationale: str
     apply: Callable[[], None]
     revert: Callable[[], None]
+    #: Files the change would touch. Anything protected ends the request.
+    targets: tuple[str, ...] = ()
 
 
 @dataclass
@@ -69,6 +83,20 @@ class SelfModificationPolicy:
 
     def evaluate(self, request: ModificationRequest) -> ModificationResult:
         bottleneck = request.bottleneck
+
+        # Checked before anything else, including whether the bottleneck is
+        # real. A perfectly justified reason to widen one's own permissions is
+        # still a reason to widen one's own permissions.
+        protected = [
+            path for path in request.targets
+            if _normalise(path) in PROTECTED_MODULES
+        ]
+        if protected:
+            return ModificationResult(
+                False, False,
+                f"権限・資金・人間境界に関わる{', '.join(protected)}は自己改造できません",
+            )
+
         if not bottleneck.actionable:
             return ModificationResult(
                 False, False,
@@ -121,3 +149,7 @@ class SelfModificationPolicy:
         result = ModificationResult(True, True, "テスト通過。変更を採用しました")
         self.log.record(request, result)
         return result
+
+
+def _normalise(path: str) -> str:
+    return path.replace("\\", "/").lstrip("./")

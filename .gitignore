@@ -67,3 +67,4 @@ _final_*.png
 runs/capital.json
 runs/payments.json
 runs/delivery_proof/
+external_action_grant.json
