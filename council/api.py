@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import logging
 import re
 import tempfile
 import uuid
@@ -62,6 +63,8 @@ from council.security import COUNCIL_ROOT, validate_output_root
 from council.storage import write_json
 from council.transcription import LocalWhisperTranscriber
 
+
+_LOG = logging.getLogger("guildless.payments")
 
 TERMINAL_STATES = {"completed", "degraded", "partial", "awaiting_approval", "failed"}
 LEGACY_UI_ROOT = Path(__file__).resolve().parent / "ui"
@@ -891,9 +894,19 @@ def create_app(
         try:
             checkout = processor.handle_webhook(body, dict(request.headers))
         except WebhookRejected as exc:
+            # Log the reason: "signature does not match" means the secret is
+            # wrong and every real payment is being dropped, while "unknown
+            # checkout" is the guard working. Without this they are the same
+            # silent 400 and a broken integration looks like a healthy one.
+            _LOG.warning("payment webhook rejected: %s", exc)
             # 400, never 200. A provider that gets 200 stops retrying, and a
             # forged event must not be quietly accepted either.
             raise HTTPException(status_code=400, detail=str(exc)) from None
+        _LOG.info(
+            "payment webhook accepted: checkout=%s status=%s",
+            checkout.checkout_id if checkout else "-",
+            checkout.status if checkout else "-",
+        )
         return {
             "received": True,
             "checkout_id": checkout.checkout_id if checkout else None,
