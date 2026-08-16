@@ -94,8 +94,13 @@ class ContinuationPolicy:
     already been observed in systems like this one.
     """
 
-    def __init__(self, *, pivot_after: int = 3):
+    def __init__(self, *, pivot_after: int = 3, give_up_after_rounds: int = 3):
         self.pivot_after = pivot_after
+        #: Consecutive rounds that produce no sale before the run concedes.
+        #: More than one because a round can fail for reasons that resolve --
+        #: an outage, a channel becoming available -- and fewer than many
+        #: because retrying a doomed approach burns capital for nothing.
+        self.give_up_after_rounds = give_up_after_rounds
 
     def may_stop_for(self, task: str) -> bool:
         """Only legally-human work can pause a run."""
@@ -147,7 +152,7 @@ class GoalRun:
 
     def run(self) -> RunOutcome:
         tried = 0
-        exhausted_rounds = 0
+        fruitless_rounds = 0
 
         while True:
             terminal = self._terminal_check(tried)
@@ -155,15 +160,11 @@ class GoalRun:
                 return terminal
 
             batch = self.strategies()
-            if not batch:
-                exhausted_rounds += 1
-                # One empty round means the current approach found nothing; two
-                # means there is genuinely nothing left to try.
-                if exhausted_rounds >= 2:
-                    return self._fail("no_viable_strategy", "実行可能な戦略が尽きました", tried)
-                continue
-            exhausted_rounds = 0
 
+            # A round is fruitless whether it produced nothing or produced only
+            # strategies that failed. Counting empty rounds alone lets a source
+            # that keeps returning the same doomed strategy spin forever, which
+            # is the meltdown loop wearing a different hat.
             for strategy in batch:
                 tried += 1
                 terminal = self._terminal_check(tried)
@@ -173,6 +174,10 @@ class GoalRun:
                 outcome = self._run_strategy(strategy)
                 if outcome is not None:
                     return outcome
+
+            fruitless_rounds += 1
+            if fruitless_rounds >= self.policy.give_up_after_rounds:
+                return self._fail("no_viable_strategy", "実行可能な戦略が尽きました", tried)
 
     # -- one strategy --------------------------------------------------------
 
