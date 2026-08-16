@@ -53,7 +53,9 @@ class FakeProvider:
                 "decision": "Use only supplied context",
                 "consensus": ["read only"],
                 "disagreements": [], "rejected_options": [], "risks": [],
-                "next_action": "present candidate", "user_question": None, "confidence": 0.8,
+                "evidence": ["supplied context only"], "assumptions": [], "unknowns": [],
+                "next_action": "present candidate", "experiment": None,
+                "user_question": None, "confidence": 0.8,
             }
         value = schema_model.model_validate(parsed).model_dump(mode="json")
         return ProviderResult(
@@ -166,3 +168,72 @@ async def test_http_contract_has_no_context_path_escape_hatch(tmp_path: Path):
             "allowed_providers": ["deepseek", "codex"],
         })
         assert response.status_code == 422
+
+@pytest.mark.asyncio
+async def test_revenue_analyze_and_overview(tmp_path: Path):
+    app, _ = make_app(tmp_path)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        overview = (await client.get("/v1/revenue/overview")).json()
+        assert overview["exists"] is False
+        response = await client.post("/v1/revenue/analyze", json={
+            "product": "ホームページ改善診断レポート",
+            "price_yen": 5000,
+            "target_revenue_yen": 15000,
+            "budget_yen": 30000,
+            "deadline_days": 14,
+        })
+        assert response.status_code == 200
+        plan = response.json()
+        assert plan["backward_calc"]["required_orders"] == 3
+        assert plan["backward_calc"]["required_meetings"] == 15
+        assert plan["backward_calc"]["required_contacts"] == 300
+        overview = (await client.get("/v1/revenue/overview")).json()
+        assert overview["exists"] is True
+        assert overview["plan"]["plan_id"] == plan["plan_id"]
+
+
+@pytest.mark.asyncio
+async def test_revenue_analyze_validates(tmp_path: Path):
+    app, _ = make_app(tmp_path)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post("/v1/revenue/analyze", json={
+            "product": "   ", "price_yen": 5000,
+        })
+        assert response.status_code == 422
+        bad_price = await client.post("/v1/revenue/analyze", json={
+            "product": "テスト", "price_yen": 50,
+        })
+        assert bad_price.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_revenue_scout_with_fake_scout(tmp_path: Path):
+    class FakeScout:
+        async def research(self, queries, constraints):
+            return {
+                "accepted": [
+                    {
+                        "full_name": "example/sales-tool",
+                        "html_url": "https://github.com/example/sales-tool",
+                        "description": "b2b sales automation",
+                        "stars": 120,
+                        "score": 0.9,
+                        "capabilities": ["web_search"],
+                    }
+                ]
+            }
+
+    app, _ = make_app(tmp_path)
+    app.state.github_scout = FakeScout()
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        plan = (await client.post("/v1/revenue/analyze", json={
+            "product": "Web診断レポート", "price_yen": 5000,
+        })).json()
+        assert plan["gaps"], "expected gaps for bare engine"
+        response = await client.post("/v1/revenue/scout", json={"plan_id": plan["plan_id"]})
+        assert response.status_code == 200
+        updated = response.json()
+        assert updated["scout"]["status"] == "done"
+        assert all(gap["discovered_candidates"] for gap in updated["gaps"])
+        missing = await client.post("/v1/revenue/scout", json={"plan_id": "no_such_plan"})
+        assert missing.status_code == 404

@@ -47,7 +47,11 @@ class FakeProvider:
                 "disagreements": ["サンプル率は実測で調整する"],
                 "rejected_options": ["全件手作業: 工数が大きい"],
                 "risks": ["分類境界の偏り"],
+                "evidence": ["既存namespaceは3種類に偏っている"],
+                "assumptions": ["再分類は自動化できる"],
+                "unknowns": ["境界事例の実数"],
                 "next_action": "固定評価セットと停止基準を作成する",
+                "experiment": None,
                 "user_question": None,
                 "confidence": 0.84,
             }

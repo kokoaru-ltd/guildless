@@ -56,3 +56,9 @@ third_party/faster-whisper/
 htmlcov/
 .DS_Store
 Thumbs.db
+
+# Job scratch space and local run artifacts
+workspaces/
+.backup-*/
+_shot_*.png
+_final_*.png

@@ -5,7 +5,7 @@ Council Service is an asynchronous, read-only advisory service. It stores every 
 ## Start
 
 ```powershell
-cd D:\guildless_council
+cd D:\guildless
 .\.venv\Scripts\python -m council serve --host 127.0.0.1 --port 8780
 ```
 

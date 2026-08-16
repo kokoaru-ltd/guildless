@@ -4,7 +4,7 @@ Guildlessへ目的を1件渡すと、次の処理を一続きで実行します�
 
 1. GitHubから候補を収集し、ライセンス・更新状況・機能を固定ルールで評価する
 2. 複数AIが独立提案、反論、再検討、最終判定を行う
-3. 採用候補を固定コミットで `D:\guildless_workspaces` に取得する
+3. 採用候補を固定コミットで `D:\guildless\workspaces` に取得する
 4. Action Agentが実コードとライセンスを読み、実装ファイル一式を構造化して返す
 5. Guildless本体がパスを検査し、`output/` 内だけへファイルを適用する
 6. 言語を自動判定し、許可済みのPythonまたはTypeScript検証を実行する
@@ -14,7 +14,7 @@ Guildlessへ目的を1件渡すと、次の処理を一続きで実行します�
 ## 一命令での実行
 
 ```powershell
-cd D:\guildless_council
+cd D:\guildless
 .\.venv\Scripts\python.exe -m council job `
   --objective "目的をここに書く" `
   --github-query "GitHub検索語" `

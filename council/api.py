@@ -16,15 +16,37 @@ from fastapi.staticfiles import StaticFiles
 
 from council.autonomous import GuildlessAutonomousRunner
 from council.config import Settings
+from council.decision_ledger import DecisionLedger, Outcome
+from council.success_validator import validate_deliberation
 from council.guildless import GuildlessOrchestrator
 from council.orchestrator import CouncilOrchestrator
 from council.sales_oss import SalesOssError, SalesOssRegistry
+from council.github_scout import GitHubScout, GitHubScoutError
+from council.revenue_engine import (
+    RevenueEngine,
+    RevenueEngineError,
+    RevenuePlanManager,
+    discover_from_github,
+)
+from council.v0_engine import V0EngineError, V0LoopManager
 from council.schemas import (
     CouncilRunAccepted,
     CouncilRunRequest,
+    DecisionOutcomeRequest,
     GuildlessJobRequest,
     GuildlessRunRequest,
+    RevenueAnalyzeRequest,
+    RevenueScoutRequest,
     SalesLeadScoreRequest,
+    V0DailyConfirmRequest,
+    V0DeliverRequest,
+    V0GotoRequest,
+    V0KillRequest,
+    V0LoopIdRequest,
+    V0OrderRequest,
+    V0ResolveCapabilityRequest,
+    V0SelectRequest,
+    V0StartRequest,
 )
 from council.security import COUNCIL_ROOT, validate_output_root
 from council.storage import write_json
@@ -35,13 +57,34 @@ TERMINAL_STATES = {"completed", "degraded", "partial", "awaiting_approval", "fai
 LEGACY_UI_ROOT = Path(__file__).resolve().parent / "ui"
 FRONTEND_DIST = Path(__file__).resolve().parent.parent / "frontend" / "dist"
 UI_ROOT = FRONTEND_DIST if (FRONTEND_DIST / "index.html").exists() else LEGACY_UI_ROOT
-WORKSPACE_ROOT = Path("D:/guildless_workspaces").resolve()
+WORKSPACE_ROOT = (Path(__file__).resolve().parent.parent / "workspaces").resolve()
 PREVIEWABLE_SUFFIXES = {".md", ".txt", ".json", ".py", ".ts", ".tsx", ".js", ".css", ".html", ".toml", ".yaml", ".yml"}
 MAX_AUDIO_BYTES = 25 * 1024 * 1024
 ALLOWED_AUDIO_TYPES = {
     "audio/webm", "audio/ogg", "audio/wav", "audio/x-wav", "audio/mpeg",
     "audio/mp4", "video/webm", "application/octet-stream",
 }
+
+
+def _providers_of(run_dir: Path) -> tuple[list[str], str]:
+    """Which models proposed and which one judged, read from the cost report.
+
+    The judge is always the last call in a completed run; everything before it
+    is a proposal or a critique.
+    """
+    cost_path = run_dir / "cost_report.json"
+    if not cost_path.exists():
+        return [], ""
+    try:
+        calls = json.loads(cost_path.read_text(encoding="utf-8")).get("calls") or []
+    except (json.JSONDecodeError, OSError):
+        return [], ""
+    names = [str(call.get("provider") or "") for call in calls if call.get("provider")]
+    if not names:
+        return [], ""
+    judge = names[-1]
+    proposers = sorted({name for name in names[:-1]})
+    return proposers, judge
 
 
 class CouncilRunManager:
@@ -58,6 +101,7 @@ class CouncilRunManager:
         self.orchestrator_factory = orchestrator_factory
         self.tasks: dict[str, asyncio.Task[None]] = {}
         self.locks: dict[str, asyncio.Lock] = {}
+        self.ledger = DecisionLedger(self.output_root)
 
     def run_dir(self, run_id: str) -> Path:
         if not re.fullmatch(r"[A-Za-z0-9_-]{1,100}", run_id):
@@ -113,6 +157,7 @@ class CouncilRunManager:
                 run_id=run_id,
                 event_callback=emit,
             )
+            self._record_decision(run_id, request)
         except Exception as exc:
             await self._record_event(
                 run_id,
@@ -121,6 +166,34 @@ class CouncilRunManager:
             )
         finally:
             await orchestrator.aclose()
+
+    def _record_decision(self, run_id: str, request: CouncilRunRequest) -> None:
+        """File the finished decision so it can be scored once results arrive.
+
+        A decision nobody can grade later teaches the company nothing. Filing it
+        must never break the run itself, so storage errors are swallowed here.
+        """
+        run_dir = self.output_root / run_id
+        candidate_path = run_dir / "candidate_record.json"
+        if not candidate_path.exists():
+            return
+        try:
+            candidate = json.loads(candidate_path.read_text(encoding="utf-8"))
+            final_decision = candidate.get("final_decision") or {}
+            if not final_decision:
+                return
+            proposers, judge = _providers_of(run_dir)
+            self.ledger.record(
+                kind="experiment_design" if final_decision.get("experiment") else "advisory",
+                tier="council",
+                question=request.question,
+                final_decision=final_decision,
+                proposers=proposers,
+                judge=judge,
+                run_id=run_id,
+            )
+        except (json.JSONDecodeError, OSError, KeyError, ValueError, TypeError):
+            return
 
     async def _record_event(self, run_id: str, run_status: str, details: dict) -> None:
         run_dir = self.output_root / run_id
@@ -159,13 +232,27 @@ class CouncilRunManager:
         status_payload = json.loads((run_dir / "run_status.json").read_text(encoding="utf-8"))
         candidate_path = run_dir / "candidate_record.json"
         error_path = run_dir / "run_error.json"
+        final_result = (
+            json.loads(candidate_path.read_text(encoding="utf-8")) if candidate_path.exists() else None
+        )
+        verdict = validate_deliberation(
+            (final_result or {}).get("final_decision"), require_experiment=False
+        )
         return {
             "run_id": run_id,
             "status": status_payload["status"],
             "record_type": "assistant_council_candidate",
             "promotion_status": "unconfirmed",
             "automatic_promotion_supported": False,
-            "final_result": json.loads(candidate_path.read_text(encoding="utf-8")) if candidate_path.exists() else None,
+            "final_result": final_result,
+            # A finished process is not a finished decision. This reports what
+            # actually came out, so a calm status cannot be mistaken for an
+            # answer when every provider was in fact dead.
+            "deliberation": {
+                "level": verdict.level,
+                "usable": verdict.ok,
+                "reason": verdict.reason,
+            },
             "error": json.loads(error_path.read_text(encoding="utf-8")) if error_path.exists() else status_payload.get("details", {}).get("error"),
         }
 
@@ -592,6 +679,10 @@ def create_app(
     guildless_orchestrator_factory: Callable[[Settings], GuildlessOrchestrator] | None = None,
     voice_transcriber: Any | None = None,
     sales_registry: SalesOssRegistry | None = None,
+    v0_manager: V0LoopManager | None = None,
+    revenue_engine: RevenueEngine | None = None,
+    revenue_plan_manager: RevenuePlanManager | None = None,
+    github_scout: Any | None = None,
 ) -> FastAPI:
     app = FastAPI(title="Council Service", version="1.0.0")
     app.mount("/ui-assets", StaticFiles(directory=UI_ROOT), name="guildless-ui-assets")
@@ -611,6 +702,10 @@ def create_app(
     app.state.guildless_job_manager = job_manager
     app.state.voice_transcriber = voice_transcriber or LocalWhisperTranscriber()
     app.state.sales_registry = sales_registry or SalesOssRegistry()
+    app.state.v0_manager = v0_manager or V0LoopManager(manager.output_root)
+    app.state.revenue_engine = revenue_engine or RevenueEngine(app.state.sales_registry)
+    app.state.revenue_plans = revenue_plan_manager or RevenuePlanManager(manager.output_root)
+    app.state.github_scout = github_scout or GitHubScout()
 
     @app.get("/", include_in_schema=False)
     @app.get("/guildless", include_in_schema=False)
@@ -630,6 +725,160 @@ def create_app(
             return app.state.sales_registry.score_lead(request.model_dump(mode="json"))
         except SalesOssError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    @app.get("/v1/v0/overview")
+    async def v0_overview() -> dict[str, Any]:
+        loop = app.state.v0_manager.latest()
+        return {"exists": loop is not None, "loop": loop}
+
+    @app.post("/v1/v0/start")
+    async def v0_start(request: V0StartRequest) -> dict[str, Any]:
+        try:
+            return app.state.v0_manager.start(
+                intent=request.intent,
+                budget_yen=request.budget_yen,
+                deadline_days=request.deadline_days,
+            )
+        except V0EngineError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @app.post("/v1/v0/advance")
+    async def v0_advance(request: V0LoopIdRequest) -> dict[str, Any]:
+        try:
+            return app.state.v0_manager.advance(request.loop_id)
+        except V0EngineError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.post("/v1/v0/approve")
+    async def v0_approve(request: V0LoopIdRequest) -> dict[str, Any]:
+        try:
+            return app.state.v0_manager.approve(request.loop_id)
+        except V0EngineError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @app.post("/v1/v0/select")
+    async def v0_select(request: V0SelectRequest) -> dict[str, Any]:
+        try:
+            return app.state.v0_manager.select(request.loop_id, request.candidate_id)
+        except V0EngineError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @app.post("/v1/v0/daily-confirm")
+    async def v0_daily_confirm(request: V0DailyConfirmRequest) -> dict[str, Any]:
+        try:
+            return app.state.v0_manager.daily_confirm(request.loop_id, note=request.note)
+        except V0EngineError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.post("/v1/v0/order")
+    async def v0_order(request: V0OrderRequest) -> dict[str, Any]:
+        try:
+            return app.state.v0_manager.record_order(
+                request.loop_id, request.company, request.amount_yen
+            )
+        except V0EngineError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @app.post("/v1/v0/deliver")
+    async def v0_deliver(request: V0DeliverRequest) -> dict[str, Any]:
+        try:
+            return app.state.v0_manager.deliver(request.loop_id, request.order_id)
+        except V0EngineError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @app.post("/v1/v0/decide")
+    async def v0_decide(request: V0LoopIdRequest) -> dict[str, Any]:
+        try:
+            return app.state.v0_manager.decide(request.loop_id)
+        except V0EngineError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @app.post("/v1/v0/kill")
+    async def v0_kill(request: V0KillRequest) -> dict[str, Any]:
+        try:
+            return app.state.v0_manager.kill(request.loop_id, reason=request.reason)
+        except V0EngineError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.post("/v1/v0/goto")
+    async def v0_goto(request: V0GotoRequest) -> dict[str, Any]:
+        try:
+            return app.state.v0_manager.goto(request.loop_id, request.stage)
+        except V0EngineError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @app.post("/v1/v0/resolve-capability")
+    async def v0_resolve_capability(request: V0ResolveCapabilityRequest) -> dict[str, Any]:
+        try:
+            return app.state.v0_manager.add_capability(
+                request.loop_id, request.name, request.source
+            )
+        except V0EngineError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @app.get("/v1/decisions")
+    async def list_decisions(limit: int = Query(50, ge=1, le=500)) -> dict[str, Any]:
+        records = manager.ledger.all()
+        records.reverse()
+        return {"decisions": [record.to_json() for record in records[:limit]], "count": len(records)}
+
+    @app.get("/v1/decisions/accuracy")
+    async def decision_accuracy() -> dict[str, Any]:
+        return {"providers": manager.ledger.provider_accuracy()}
+
+    @app.get("/v1/decisions/{decision_id}")
+    async def get_decision(decision_id: str) -> dict[str, Any]:
+        record = manager.ledger.get(decision_id)
+        if record is None:
+            raise HTTPException(status_code=404, detail="decision not found")
+        return record.to_json()
+
+    @app.post("/v1/decisions/{decision_id}/score")
+    async def score_decision(decision_id: str, request: DecisionOutcomeRequest) -> dict[str, Any]:
+        try:
+            record = manager.ledger.score(decision_id, Outcome(**request.model_dump()))
+        except KeyError:
+            raise HTTPException(status_code=404, detail="decision not found") from None
+        return record.to_json()
+
+    @app.get("/v1/revenue/overview")
+    async def revenue_overview() -> dict[str, Any]:
+        latest = app.state.revenue_plans.latest()
+        return {"exists": latest is not None, "plan": latest}
+
+    @app.post("/v1/revenue/analyze")
+    async def revenue_analyze(request: RevenueAnalyzeRequest) -> dict[str, Any]:
+        try:
+            plan = app.state.revenue_engine.analyze(
+                product=request.product,
+                price_yen=request.price_yen,
+                target_revenue_yen=request.target_revenue_yen,
+                budget_yen=request.budget_yen,
+                deadline_days=request.deadline_days,
+                region=request.region,
+                industry=request.industry,
+            )
+        except RevenueEngineError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        app.state.revenue_plans.save(plan)
+        return plan
+
+    @app.post("/v1/revenue/scout")
+    async def revenue_scout(request: RevenueScoutRequest) -> dict[str, Any]:
+        try:
+            plan = app.state.revenue_plans.load(request.plan_id)
+        except RevenueEngineError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        try:
+            await discover_from_github(plan, app.state.github_scout)
+        except GitHubScoutError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        except Exception as exc:  # httpx等のネットワーク失敗も503として報告
+            raise HTTPException(
+                status_code=503, detail=f"GitHub探索に失敗しました: {exc}"
+            ) from exc
+        app.state.revenue_plans.save(plan)
+        return plan
 
     @app.get("/v1/audio/transcriptions/status")
     async def transcription_status() -> dict:

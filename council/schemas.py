@@ -27,15 +27,56 @@ class Critique(StrictModel):
     revised_recommendation: str
 
 
+class ExperimentDesign(StrictModel):
+    """The executable half of a business decision.
+
+    A council that stops at prose cannot be acted on or scored. Every business
+    decision must land here: one falsifiable hypothesis, the exact contact set,
+    the money at stake, and the conditions that end the experiment either way.
+
+    ``next_review_hours`` is relative on purpose. Models cannot reliably produce
+    a correct absolute timestamp; the engine stamps the real clock time.
+    """
+
+    hypothesis: str = Field(min_length=1)
+    target_customer: str = Field(min_length=1)
+    offer: str = Field(min_length=1)
+    price_yen: int = Field(ge=0)
+    channel: Literal["email", "phone", "dm", "form", "ads"]
+    sample_size: int = Field(ge=1, le=10_000)
+    max_budget_yen: int = Field(ge=0)
+    success_condition: str = Field(min_length=1)
+    failure_condition: str = Field(min_length=1)
+    next_review_hours: int = Field(ge=1, le=8_760)
+
+
 class FinalDecision(StrictModel):
     decision: str
     consensus: list[str]
     disagreements: list[str]
     rejected_options: list[str]
     risks: list[str]
+    # Evidence and unknowns are separated from assumptions so a later scoring
+    # pass can tell "we were wrong" apart from "we never knew".
+    evidence: list[str]
+    assumptions: list[str]
+    unknowns: list[str]
     next_action: str
+    # Null only for non-business questions. The business path rejects null.
+    experiment: ExperimentDesign | None
     user_question: str | None
     confidence: float = Field(ge=0.0, le=1.0)
+
+
+class DecisionOutcomeRequest(StrictModel):
+    """Counted results of an experiment. Never estimates, only observations."""
+
+    contacted: int = Field(ge=0, default=0)
+    replied: int = Field(ge=0, default=0)
+    meetings: int = Field(ge=0, default=0)
+    orders: int = Field(ge=0, default=0)
+    revenue_yen: int = Field(ge=0, default=0)
+    cost_yen: int = Field(ge=0, default=0)
 
 
 RunState = Literal[
@@ -52,11 +93,11 @@ RunState = Literal[
 
 class CouncilRunRequest(StrictModel):
     task_type: Literal["general", "architecture", "implementation", "evaluation_design"]
-    mode: Literal["fast", "local", "thorough", "benchmark"]
+    mode: Literal["fast", "local", "real", "thorough", "benchmark"]
     question: str = Field(min_length=1, max_length=100_000)
     context: dict[str, Any]
-    allowed_providers: list[Literal["claude", "deepseek", "codex", "sakana"]] = Field(
-        min_length=1, max_length=4
+    allowed_providers: list[Literal["claude", "deepseek", "deepseek_api", "codex", "sakana", "gemini", "glm"]] = Field(
+        min_length=1, max_length=6
     )
 
     @field_validator("question")
@@ -183,8 +224,8 @@ class GuildlessRunRequest(StrictModel):
     github_queries: list[str] = Field(min_length=1, max_length=8)
     context: dict[str, Any] = Field(default_factory=dict)
     constraints: GitHubSelectionConstraints = Field(default_factory=GitHubSelectionConstraints)
-    allowed_providers: list[Literal["claude", "deepseek", "codex", "sakana"]] = Field(
-        min_length=2, max_length=4
+    allowed_providers: list[Literal["claude", "deepseek", "deepseek_api", "codex", "sakana", "gemini", "glm"]] = Field(
+        min_length=2, max_length=6
     )
     max_rounds: int = Field(default=3, ge=1, le=3)
     confidence_threshold: float = Field(default=0.8, ge=0.5, le=1.0)
@@ -240,7 +281,7 @@ class ImplementationFile(StrictModel):
 
 class ImplementationBundle(StrictModel):
     summary: str
-    files: list[ImplementationFile] = Field(min_length=1, max_length=40)
+    files: list[ImplementationFile] = Field(min_length=1, max_length=60)
     test_strategy: str
     approval_requests: list[str]
 
@@ -250,8 +291,8 @@ class GuildlessJobRequest(StrictModel):
     github_queries: list[str] = Field(min_length=1, max_length=8)
     context: dict[str, Any] = Field(default_factory=dict)
     constraints: GitHubSelectionConstraints = Field(default_factory=GitHubSelectionConstraints)
-    allowed_providers: list[Literal["claude", "deepseek", "codex", "sakana"]] = Field(
-        min_length=2, max_length=4
+    allowed_providers: list[Literal["claude", "deepseek", "deepseek_api", "codex", "sakana", "gemini", "glm"]] = Field(
+        min_length=2, max_length=6
     )
     workspace_label: str = Field(default="job", pattern=r"^[A-Za-z0-9_-]{1,40}$")
     max_rounds: int = Field(default=1, ge=1, le=3)
@@ -303,3 +344,122 @@ def strict_json_schema(model_type: type[StrictModel]) -> dict:
 
     clean(schema)
     return schema
+
+
+def gemini_response_schema(model_type: type[StrictModel]) -> dict:
+    """The same schema narrowed to the subset Gemini's responseSchema accepts.
+
+    Gemini takes a restricted OpenAPI 3.0 dialect, not full JSON Schema. It
+    rejects ``additionalProperties`` outright with HTTP 400, and expresses
+    optional fields as ``nullable`` rather than an ``anyOf`` with null. It also
+    cannot follow ``$ref``, so definitions are inlined.
+    """
+    schema = strict_json_schema(model_type)
+    definitions = schema.pop("$defs", {})
+
+    def convert(node):
+        if isinstance(node, list):
+            return [convert(item) for item in node]
+        if not isinstance(node, dict):
+            return node
+
+        ref = node.get("$ref")
+        if isinstance(ref, str) and ref.startswith("#/$defs/"):
+            target = definitions.get(ref.split("/")[-1], {})
+            merged = {**target, **{k: v for k, v in node.items() if k != "$ref"}}
+            return convert(merged)
+
+        # "X | None" arrives as anyOf[X, null]. Gemini wants the real branch
+        # marked nullable instead.
+        options = node.get("anyOf") or node.get("oneOf")
+        if isinstance(options, list):
+            concrete = [item for item in options if item.get("type") != "null"]
+            nullable = len(concrete) != len(options)
+            if len(concrete) == 1:
+                converted = convert(concrete[0])
+                if nullable:
+                    converted["nullable"] = True
+                for key, value in node.items():
+                    if key not in ("anyOf", "oneOf"):
+                        converted.setdefault(key, convert(value))
+                return converted
+
+        result = {}
+        for key, value in node.items():
+            if key == "additionalProperties":
+                continue
+            result[key] = convert(value)
+        return result
+
+    return convert(schema)
+
+
+class V0StartRequest(StrictModel):
+    intent: str = Field(min_length=1, max_length=1000)
+    budget_yen: int = Field(default=30_000, ge=1000, le=100_000)
+    deadline_days: int = Field(default=14, ge=1, le=90)
+
+    @field_validator("intent")
+    @classmethod
+    def strip_intent(cls, value: str) -> str:
+        return value.strip()
+
+
+class V0LoopIdRequest(StrictModel):
+    loop_id: str = Field(pattern=r"^[A-Za-z0-9_-]{1,80}$")
+
+
+class V0SelectRequest(StrictModel):
+    loop_id: str = Field(pattern=r"^[A-Za-z0-9_-]{1,80}$")
+    candidate_id: str = Field(min_length=1, max_length=80)
+
+
+class V0DailyConfirmRequest(StrictModel):
+    loop_id: str = Field(pattern=r"^[A-Za-z0-9_-]{1,80}$")
+    note: str = Field(default="", max_length=300)
+
+
+class V0OrderRequest(StrictModel):
+    loop_id: str = Field(pattern=r"^[A-Za-z0-9_-]{1,80}$")
+    company: str = Field(min_length=1, max_length=200)
+    amount_yen: int = Field(ge=100, le=10_000_000)
+
+
+class V0DeliverRequest(StrictModel):
+    loop_id: str = Field(pattern=r"^[A-Za-z0-9_-]{1,80}$")
+    order_id: str = Field(min_length=1, max_length=64)
+
+
+class V0KillRequest(StrictModel):
+    loop_id: str = Field(pattern=r"^[A-Za-z0-9_-]{1,80}$")
+    reason: str = Field(default="", max_length=500)
+
+
+class V0GotoRequest(StrictModel):
+    loop_id: str = Field(pattern=r"^[A-Za-z0-9_-]{1,80}$")
+    stage: str = Field(min_length=1, max_length=20)
+
+
+class V0ResolveCapabilityRequest(StrictModel):
+    loop_id: str = Field(pattern=r"^[A-Za-z0-9_-]{1,80}$")
+    name: str = Field(min_length=1, max_length=200)
+    source: str = Field(default="", max_length=240)
+
+
+class RevenueAnalyzeRequest(StrictModel):
+    product: str = Field(min_length=1, max_length=200)
+    price_yen: int = Field(ge=300, le=10_000_000)
+    target_revenue_yen: int | None = Field(default=None, ge=300, le=100_000_000)
+    budget_yen: int = Field(default=30_000, ge=1_000, le=1_000_000)
+    deadline_days: int = Field(default=14, ge=1, le=90)
+    region: str = Field(default="", max_length=100)
+    industry: str = Field(default="", max_length=100)
+
+    @field_validator("product")
+    @classmethod
+    def strip_product(cls, value: str) -> str:
+        return value.strip()
+
+
+class RevenueScoutRequest(StrictModel):
+    plan_id: str = Field(pattern=r"^[A-Za-z0-9_-]{1,80}$")

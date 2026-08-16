@@ -68,6 +68,18 @@ and reversibility. Each rejected_options string must include a concise rejection
 reason. Preserve unresolved non-blocking matters in disagreements or risks. Set
 user_question to null unless an irreversible decision cannot safely proceed without a
 specific user answer. Never add fields outside the final schema.
+
+Separate what you know from what you are guessing. Put observed facts and figures
+from the packet in evidence, beliefs you are treating as true in assumptions, and
+what nobody has measured yet in unknowns. Do not put a guess in evidence.
+
+A decision that only describes a direction cannot be executed or scored, so it is
+not a decision. If this question is about making or growing money, you must also
+return experiment: one falsifiable test that can start immediately. Choose the
+smallest sample and budget that would still change your mind about the hypothesis.
+success_condition and failure_condition must both be checkable against counted
+numbers, not judgement. Set experiment to null only when the question is not about
+money at all.
 """
     packet = {
         "task_type": canonical["task_type"],

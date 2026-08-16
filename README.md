@@ -6,6 +6,18 @@ Guildlessは、経営者の相談を整理し、必要なOSSをGitHubから調�
 
 ![Guildless CEO Desk](docs/assets/guildless-one-screen.png)
 
+## 置き場所
+
+Guildlessの本体は **`D:\guildless`** ひとつだけです。編集・起動・コミットはすべてここで行います。
+
+| 場所 | 中身 |
+| --- | --- |
+| `D:\guildless` | 本体（唯一の作業場所） |
+| `D:\guildless\workspaces` | 仕事ごとの隔離作業ディレクトリ |
+| `D:\guildless\runs` | 実行記録・監査ログ |
+| `D:\guildless_archive` | 過去の複製・参照用OSS・バックアップ（読むだけ） |
+| `D:\guildless_sim` | 別システム。Guildlessからのアクセスは禁止 |
+
 ## 現在できること
 
 - **壁打ち**: DeepSeek、Codexなど利用可能なモデルで相談を整理

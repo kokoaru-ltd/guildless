@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { CeoHome } from '@/ceo-home'
 import { GuildlessMark } from '@/components/guildless-mark'
 import { SalesMarketingView } from '@/sales-marketing-view'
+import { executiveJapaneseText, executiveWorkTitle } from '@/lib/executive-copy'
 
 type View = 'home' | 'growth' | 'work'
 type Job = {
@@ -15,7 +16,7 @@ type Event = { sequence: number; status: string; occurred_at: string; details?: 
 type Artifact = { path: string; exists: boolean; size: number; sha256?: string }
 
 const navItems = [
-  { id: 'home' as const, label: '会社', description: '目標・要判断・リスク', icon: Target },
+  { id: 'home' as const, label: '会社', description: 'お金・いま決めること', icon: Target },
   { id: 'growth' as const, label: '売上', description: '営業・マーケ', icon: Megaphone },
   { id: 'work' as const, label: '実行', description: 'いま何をしているか', icon: Activity },
 ]
@@ -36,10 +37,6 @@ async function api<T>(url: string, init?: RequestInit): Promise<T> {
   const data = await response.json().catch(() => ({}))
   if (!response.ok) throw new Error(data.detail ? JSON.stringify(data.detail) : `HTTP ${response.status}`)
   return data as T
-}
-
-function safeText(value: unknown, fallback = '—') {
-  return typeof value === 'string' && value.trim() ? value : fallback
 }
 
 function stageIndex(status?: string) {
@@ -157,30 +154,30 @@ function ExecutionView({ jobs, selectedId, onSelect, job, events, council, artif
 
   return <div className='grid h-[calc(100svh-7.5rem)] min-h-[620px] grid-rows-[auto_1fr] gap-3 overflow-hidden'>
     <section className='flex items-center gap-3 rounded-[18px] border border-[#dedbd4] bg-white px-4 py-3'>
-      <div className='min-w-0 flex-1'><p className='text-[10px] font-semibold tracking-[.12em] text-[#817d76]'>OPERATIONS</p><h1 className='truncate text-lg font-semibold'>Guildlessはいま何をしているか</h1></div>
-      <select value={selectedId || ''} onChange={event => onSelect(event.target.value)} aria-label='仕事を選択' className='max-w-[360px] rounded-xl border border-[#dedbd4] bg-white px-3 py-2 text-xs outline-none'>{jobs.length ? jobs.map(item => <option key={item.job_id} value={item.job_id}>{item.objective}</option>) : <option value=''>仕事はありません</option>}</select>
+      <div className='min-w-0 flex-1'><p className='text-[10px] font-semibold text-[#817d76]'>実行状況</p><h1 className='truncate text-lg font-semibold'>Guildlessはいま何をしているか</h1></div>
+      <select value={selectedId || ''} onChange={event => onSelect(event.target.value)} aria-label='仕事を選択' className='max-w-[360px] rounded-xl border border-[#dedbd4] bg-white px-3 py-2 text-xs outline-none'>{jobs.length ? jobs.map(item => <option key={item.job_id} value={item.job_id}>{executiveWorkTitle(item)}</option>) : <option value=''>仕事はありません</option>}</select>
       <button onClick={onRefresh} className='rounded-xl border border-[#dedbd4] px-3 py-2 text-xs font-medium'>更新</button>
-      <Button onClick={onNew} className='h-9 rounded-xl bg-[#171513] px-4 text-white hover:bg-black'><Plus className='size-4' />仕事を追加</Button>
+      <Button onClick={onNew} className='h-9 rounded-xl bg-[#ff4801] px-4 text-white hover:bg-[#e04400]'><Plus className='size-4' />仕事を追加</Button>
     </section>
 
     <section className='grid min-h-0 gap-3 lg:grid-cols-[1.2fr_.8fr]'>
       <div className='grid min-h-0 grid-rows-[auto_1fr] gap-3'>
         <div className='rounded-[20px] border border-[#dedbd4] bg-white p-5'>
-          <div className='flex items-start justify-between gap-4'><div className='min-w-0'><p className='text-xs text-[#817d76]'>現在の仕事</p><h2 className='mt-1 line-clamp-2 text-xl font-semibold leading-7'>{selected?.objective || 'まだ仕事がありません'}</h2></div><span className='shrink-0 rounded-full bg-[#fff1e9] px-3 py-1.5 text-xs font-semibold text-[#b94b1b]'>完成まで {completion}% · {statusLabels[currentStatus || ''] || '待機中'}</span></div>
+          <div className='flex items-start justify-between gap-4'><div className='min-w-0'><p className='text-xs text-[#817d76]'>現在の仕事</p><h2 className='mt-1 line-clamp-2 text-xl font-semibold leading-7'>{executiveWorkTitle(selected)}</h2></div><span className='shrink-0 rounded-full bg-[#fff1e9] px-3 py-1.5 text-xs font-semibold text-[#b94b1b]'>完成まで {completion}% · {statusLabels[currentStatus || ''] || '待機中'}</span></div>
           <div className='mt-4 h-2 overflow-hidden rounded-full bg-[#ece9e3]'><div className='h-full rounded-full bg-[#ff6b32]' style={{ width: `${completion}%` }} /></div>
           <div className='mt-4 grid grid-cols-6 gap-2'>{workStages.map(([id, label], index) => <div key={id} className='min-w-0'><p className={`truncate text-center text-[10px] ${index === currentStage ? 'font-semibold text-[#171513]' : 'text-[#99958d]'}`}>{label}</p></div>)}</div>
         </div>
 
         <div className='grid min-h-0 gap-3 md:grid-cols-2'>
-          <div className='min-h-0 rounded-[20px] border border-[#dedbd4] bg-white p-5'><p className='text-xs font-semibold'>直近の動き</p><div className='mt-3 space-y-3'>{recent.length ? recent.map(event => <div key={event.sequence} className='flex gap-3'><span className='mt-1.5 size-2 shrink-0 rounded-full bg-[#ff6b32]' /><div className='min-w-0'><p className='text-xs font-semibold'>{statusLabels[event.status] || event.status}</p><p className='mt-1 line-clamp-2 text-[11px] leading-4 text-[#817d76]'>{safeText(event.details?.message, safeText(event.details?.summary, '処理を記録しました'))}</p></div></div>) : <p className='text-xs text-[#817d76]'>動きはまだありません。</p>}</div></div>
-          <div className='min-h-0 rounded-[20px] bg-[#171513] p-5 text-white'><p className='text-[10px] font-semibold tracking-[.12em] text-white/45'>DECISION</p><h3 className='mt-2 text-base font-semibold'>経営判断</h3><p className='mt-3 line-clamp-6 text-xs leading-5 text-white/65'>{safeText(decision.decision, council?.available === false ? council.message : 'Councilの判断はまだありません。')}</p><p className='mt-4 text-[10px] text-[#ff9d75]'>反論・監査は内部で保持し、経営者には結論と要判断だけを表示</p></div>
+          <div className='min-h-0 rounded-[20px] border border-[#dedbd4] bg-white p-5'><p className='text-xs font-semibold'>直近の動き</p><div className='mt-3 space-y-3'>{recent.length ? recent.map(event => <div key={event.sequence} className='flex gap-3'><span className='mt-1.5 size-2 shrink-0 rounded-full bg-[#ff6b32]' /><div className='min-w-0'><p className='text-xs font-semibold'>{statusLabels[event.status] || '処理中'}</p><p className='mt-1 line-clamp-2 text-[11px] leading-4 text-[#817d76]'>{executiveJapaneseText(event.details?.message, executiveJapaneseText(event.details?.summary, '処理内容を記録しました'))}</p></div></div>) : <p className='text-xs text-[#817d76]'>動きはまだありません。</p>}</div></div>
+          <div className='min-h-0 rounded-[20px] border border-[#dedbd4] bg-white p-5'><p className='text-[10px] font-semibold text-[#817d76]'>判断結果</p><h3 className='mt-2 text-base font-semibold'>経営判断</h3><p className='mt-3 line-clamp-6 text-xs leading-5 text-[#4d4a45]'>{executiveJapaneseText(decision.decision, '判断結果は保存済みです。原文は監査記録に保持しています。')}</p><p className='mt-4 text-[10px] text-[#a94712]'>反論・監査は内部で保持し、経営者には結論と要判断だけを表示</p></div>
         </div>
       </div>
 
       <div className='grid min-h-0 grid-rows-4 gap-3'>
         <ExecMetric icon={<Clock3 />} label='人間の判断' value={selected?.approval_required || job?.status === 'awaiting_approval' ? '承認が必要' : 'いまは不要'} detail={selected?.approval_required ? '外部作用の前で停止中' : 'Guildlessが継続できます'} alert={Boolean(selected?.approval_required)} />
         <ExecMetric icon={<Archive />} label='成果物' value={`${verifiedArtifacts}件`} detail={artifacts.length ? `${artifacts.length}件中 ${verifiedArtifacts}件を実在確認` : 'まだ成果物はありません'} />
-        <ExecMetric icon={<CheckCircle2 />} label='検証' value={`${selected?.passed_test_count || 0} tests`} detail={sourceUnchanged === true ? '固定OSS原本は変更なし' : sourceUnchanged === false ? '原本変更を検出' : '検証結果待ち'} alert={sourceUnchanged === false} />
+        <ExecMetric icon={<CheckCircle2 />} label='検証' value={`${selected?.passed_test_count || 0}件合格`} detail={sourceUnchanged === true ? '固定OSS原本は変更なし' : sourceUnchanged === false ? '原本変更を検出' : '検証結果待ち'} alert={sourceUnchanged === false} />
         <ExecMetric icon={<ShieldCheck />} label='外部作用' value={selected?.external_actions_performed || job?.external_actions_performed ? '検出' : '0件'} detail='送信・契約・支払いは承認まで停止' alert={Boolean(selected?.external_actions_performed || job?.external_actions_performed)} />
       </div>
     </section>
@@ -200,12 +197,12 @@ function CreateDialog({ initialObjective, onClose, onCreated }: { initialObjecti
     try {
       const data = await api<{ run_id: string }>('/v1/guildless/jobs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
         objective: objective.trim(), github_queries: ['sales marketing automation OSS', 'agent workflow approval audit'], context: {},
-        allowed_providers: ['deepseek', 'codex'], workspace_label: 'ui', max_rounds: 1, max_execution_minutes: 20,
+        allowed_providers: ['sakana', 'deepseek_api', 'glm', 'codex'], workspace_label: 'ui', max_rounds: 1, max_execution_minutes: 20,
         constraints: { license_allowlist: ['MIT', 'Apache-2.0', 'BSD-2-Clause', 'BSD-3-Clause'], min_stars: 0, max_candidates: 10, active_within_days: 730 },
       }) })
       onCreated(data.run_id)
     } catch (reason) { setError(reason instanceof Error ? reason.message : '開始できませんでした') }
     finally { setSubmitting(false) }
   }
-  return <div className='fixed inset-0 z-50 grid place-items-center bg-black/30 p-4' role='dialog' aria-modal='true' aria-label='仕事を追加'><form onSubmit={submit} className='w-full max-w-xl rounded-[22px] border bg-white p-6 shadow-2xl'><div className='flex items-start justify-between'><div><p className='text-[10px] font-semibold tracking-[.12em] text-[#817d76]'>NEW WORK</p><h2 className='mt-1 text-xl font-semibold'>何を任せますか？</h2></div><button type='button' onClick={onClose} aria-label='閉じる' className='rounded-lg p-2 hover:bg-[#f3f1ed]'><X className='size-4' /></button></div><textarea autoFocus required value={objective} onChange={event => setObjective(event.target.value)} placeholder='例：今月の新規営業で優先すべき企業を選び、接触案を作る' className='mt-5 h-32 w-full resize-none rounded-2xl border border-[#dedbd4] p-4 text-base leading-7 outline-none focus:border-[#ff6b32]' />{error && <p className='mt-2 text-xs text-red-700'>{error}</p>}<div className='mt-5 flex items-center justify-between'><p className='text-[10px] text-[#817d76]'>外部送信・契約・支払いは行いません</p><Button type='submit' disabled={!objective.trim() || submitting} className='h-11 rounded-xl bg-[#ff4801] px-5 text-white hover:bg-[#e54100]'>{submitting ? <LoaderCircle className='size-4 animate-spin' /> : <Plus className='size-4' />}{submitting ? '開始中' : '任せる'}</Button></div></form></div>
+  return <div className='fixed inset-0 z-50 grid place-items-center bg-black/30 p-4' role='dialog' aria-modal='true' aria-label='仕事を追加'><form onSubmit={submit} className='w-full max-w-xl rounded-[22px] border bg-white p-6 shadow-2xl'><div className='flex items-start justify-between'><div><p className='text-[10px] font-semibold text-[#817d76]'>新しい仕事</p><h2 className='mt-1 text-xl font-semibold'>何を任せますか？</h2></div><button type='button' onClick={onClose} aria-label='閉じる' className='rounded-lg p-2 hover:bg-[#f3f1ed]'><X className='size-4' /></button></div><textarea autoFocus required value={objective} onChange={event => setObjective(event.target.value)} placeholder='例：今月の新規営業で優先すべき企業を選び、接触案を作る' className='mt-5 h-32 w-full resize-none rounded-2xl border border-[#dedbd4] p-4 text-base leading-7 outline-none focus:border-[#ff6b32]' />{error && <p className='mt-2 text-xs text-red-700'>{error}</p>}<div className='mt-5 flex items-center justify-between'><p className='text-[10px] text-[#817d76]'>外部送信・契約・支払いは行いません</p><Button type='submit' disabled={!objective.trim() || submitting} className='h-11 rounded-xl bg-[#ff4801] px-5 text-white hover:bg-[#e54100]'>{submitting ? <LoaderCircle className='size-4 animate-spin' /> : <img src='/ui-assets/decision-action-v1.png' alt='' className='size-8 object-contain' />}{submitting ? '開始中' : '任せる'}</Button></div></form></div>
 }

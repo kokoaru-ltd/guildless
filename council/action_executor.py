@@ -21,7 +21,7 @@ from council.schemas import (
 from council.storage import write_json
 
 
-DEFAULT_WORKSPACE_ROOT = Path(r"D:\guildless_workspaces")
+DEFAULT_WORKSPACE_ROOT = Path(__file__).resolve().parent.parent / "workspaces"
 FORBIDDEN_ROOTS = (Path(r"D:\guildless_sim"), Path(r"D:\founder_memory"))
 IGNORED_HASH_PARTS = {".git", "node_modules", ".venv", "__pycache__"}
 PROHIBITED_COMMAND_PATTERNS = (

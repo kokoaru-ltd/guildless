@@ -16,7 +16,7 @@ of `SYSTRAN/faster-whisper`.
 ## Set up from a fresh Guildless checkout
 
 ```powershell
-cd D:\guildless_council
+cd D:\guildless
 py -3.11 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -e ".[dev]"
 powershell -ExecutionPolicy Bypass -File .\scripts\setup_local_voice.ps1
@@ -29,7 +29,7 @@ replace it with another project.
 ## Start Guildless
 
 ```powershell
-cd D:\guildless_council
+cd D:\guildless
 .\.venv\Scripts\python.exe -m uvicorn council.api:app --host 127.0.0.1 --port 8780
 ```
 

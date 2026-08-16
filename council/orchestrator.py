@@ -13,7 +13,15 @@ from typing import Any, Awaitable, Callable, Iterable
 
 from council.config import Settings
 from council.prompts import PROMPT_VERSION, critique_prompts, judge_prompts, proposal_prompts
-from council.providers import ClaudeProvider, DeepSeekProvider, OpenAIProvider, SakanaProvider
+from council.providers import (
+    ClaudeProvider,
+    DeepSeekApiProvider,
+    DeepSeekProvider,
+    GeminiProvider,
+    GlmProvider,
+    OpenAIProvider,
+    SakanaProvider,
+)
 from council.providers.base import BaseProvider, ProviderResult, ProviderUnavailable
 from council.schemas import Critique, FinalDecision, Proposal
 from council.security import COUNCIL_ROOT, ContextPolicy, validate_output_root
@@ -26,7 +34,7 @@ ROLES = {
     "implementation": ("deepseek", "codex", "claude"),
     "evaluation_design": ("codex", "claude", "deepseek"),
 }
-VALID_MODES = {"fast", "local", "thorough", "benchmark"}
+VALID_MODES = {"fast", "local", "real", "thorough", "benchmark"}
 
 
 @dataclass(frozen=True)
@@ -51,8 +59,11 @@ def default_provider_factory(settings: Settings) -> dict[str, BaseProvider]:
     return {
         "claude": ClaudeProvider(settings.providers["claude"], **kwargs),
         "deepseek": DeepSeekProvider(settings.providers["deepseek"], **kwargs),
+        "deepseek_api": DeepSeekApiProvider(settings.providers["deepseek_api"], **kwargs),
         "codex": OpenAIProvider(settings.providers["codex"], **kwargs),
         "sakana": SakanaProvider(settings.providers["sakana"], **kwargs),
+        "gemini": GeminiProvider(settings.providers["gemini"], **kwargs),
+        "glm": GlmProvider(settings.providers["glm"], **kwargs),
     }
 
 
@@ -179,7 +190,7 @@ class CouncilOrchestrator:
         critique_results: dict[str, ProviderResult] = {}
         anonymous_critiques: dict[str, dict[str, Any]] = {}
         rounds_used = 1
-        if mode in {"thorough", "benchmark"} and len(aliases) >= 2:
+        if mode in {"real", "thorough", "benchmark"} and len(aliases) >= 2:
             await self._emit(event_callback, "criticizing", {"candidate_count": len(aliases)})
             rounds_used = 2
             alias_names = list(aliases)
@@ -362,6 +373,16 @@ class CouncilOrchestrator:
                 [(f"deepseek_{index + 1}", "deepseek") for index in range(self.settings.local_repetitions)],
                 "codex",
             )
+        if mode == "real":
+            # Two hosted models from different labs argue, a third judges.
+            # Similar models agree too readily and take bad decisions together,
+            # so provider diversity is the point, not redundancy.
+            #
+            # Proposers are excluded from judging, so every extra proposer
+            # removes a possible judge. With three proposers the judge pool
+            # collapsed to GLM alone and one bad response killed the whole run.
+            # Two proposers keeps a real fallback bench behind the judge.
+            return [("sakana", "sakana"), ("deepseek_api", "deepseek_api")], "gemini"
         if mode == "fast":
             return [("claude", "claude"), ("deepseek", "deepseek")], "codex"
         proposer_a, proposer_b, judge = ROLES[task_type]
@@ -371,6 +392,8 @@ class CouncilOrchestrator:
     def _judge_preferences(mode: str, requested: str) -> list[str]:
         if mode == "local":
             return ["codex", "claude"]
+        if mode == "real":
+            return ["gemini", "glm", "codex", "claude", "sakana", "deepseek_api"]
         return list(dict.fromkeys((requested, "sakana", "codex", "claude", "deepseek")))
 
     async def _call_many(

@@ -35,7 +35,7 @@ from council.storage import write_json
 
 
 ROLE_ORDER = ("research", "sales", "finance")
-JUDGE_PREFERENCE = ("codex", "sakana", "claude", "deepseek")
+JUDGE_PREFERENCE = ("codex", "sakana", "glm", "deepseek_api", "claude", "deepseek")
 RunEventCallback = Callable[[str, dict[str, Any]], Awaitable[None]]
 
 

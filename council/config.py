@@ -18,6 +18,25 @@ def _int(name: str, default: int) -> int:
     return int(os.getenv(name, str(default)))
 
 
+def _env(*names: str, default: str = "") -> str:
+    """Case-insensitive environment lookup with fallback names.
+
+    Some keys are pasted into .env with a different casing (e.g. Zai_api_key),
+    so plain os.getenv is not enough. The first non-empty match wins.
+    """
+    lowered = {name.lower(): name for name in os.environ}
+    for name in names:
+        direct = os.environ.get(name)
+        if direct and direct.strip():
+            return direct.strip()
+        hit = lowered.get(name.lower())
+        if hit:
+            value = os.environ.get(hit)
+            if value and value.strip():
+                return value.strip()
+    return default
+
+
 @dataclass(frozen=True)
 class PriceSpec:
     input_per_m: float = 0.0
@@ -55,7 +74,7 @@ class Settings:
         # ANTHROPIC_API_KEY. Preserve Sakana compatibility, but never pass that
         # variable to Claude Code. A real Anthropic key blocks ClaudeProvider.
         legacy_anthropic = os.getenv("ANTHROPIC_API_KEY", "").strip()
-        sakana_key = os.getenv("SAKANA_API_KEY", "").strip()
+        sakana_key = _env("SAKANA_API_KEY", "SAKANA_KEY", "FUGU_API_KEY")
         if not sakana_key and legacy_anthropic.startswith("fish_"):
             sakana_key = legacy_anthropic
         anthropic_key = "" if legacy_anthropic.startswith("fish_") else legacy_anthropic
@@ -82,11 +101,39 @@ class Settings:
                 billing_mode="local",
                 command=os.getenv("OLLAMA_COMMAND", "ollama"),
             ),
+            # Hosted DeepSeek. Independent of the local Ollama "deepseek"
+            # entry above, so the council keeps a second real voice when no
+            # local runtime is up.
+            "deepseek_api": ProviderConfig(
+                name="deepseek_api",
+                model=os.getenv("DEEPSEEK_MODEL", "deepseek-chat"),
+                api_key=_env("DEEPSEEK_API_KEY"),
+                base_url=os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com").rstrip("/"),
+                billing_mode="subscription",
+            ),
             "sakana": ProviderConfig(
                 name="sakana",
                 model=os.getenv("SAKANA_MODEL", "fugu-ultra"),
                 api_key=sakana_key,
                 base_url=os.getenv("SAKANA_BASE_URL", "https://api.sakana.ai").rstrip("/"),
+                billing_mode="subscription",
+            ),
+            "gemini": ProviderConfig(
+                name="gemini",
+                model=os.getenv("GEMINI_MODEL", "gemini-3.7-flash"),
+                api_key=_env("GEMINI_API_KEY", "GOOGLE_API_KEY", "GEMINI_KEY"),
+                base_url=os.getenv(
+                    "GEMINI_BASE_URL", "https://generativelanguage.googleapis.com"
+                ).rstrip("/"),
+                billing_mode="subscription",
+            ),
+            "glm": ProviderConfig(
+                name="glm",
+                model=os.getenv("GLM_MODEL", "glm-5.3"),
+                api_key=_env("ZHIPU_API_KEY", "ZAI_API_KEY", "Zai_api_key", "GLM_API_KEY"),
+                base_url=os.getenv("ZHIPU_BASE_URL", "https://open.bigmodel.cn/api/paas/v4").rstrip(
+                    "/"
+                ),
                 billing_mode="subscription",
             ),
         }
