@@ -110,16 +110,26 @@ class CapitalAllocator:
 
     # -- money in -----------------------------------------------------------
 
-    def record_revenue(self, amount_yen: int, *, envelope: str = "experiment") -> None:
+    def record_revenue(self, amount_yen: int, *, envelope: str | None = None) -> None:
         """Bank confirmed third-party money and put it to work.
 
         Only call this for money that actually arrived. Anything else would
         raise the spending ceiling on the strength of a promise.
+
+        By default earnings are split the same way the opening capital was, so
+        the first sale widens what the company can attempt while most of it is
+        kept back. A company that spends its first revenue entirely on the next
+        experiment has no floor to fail onto. Naming an envelope overrides this
+        and puts the whole amount in one place.
         """
         if amount_yen <= 0:
             raise CapitalError("revenue must be positive")
         self.state.revenue_yen += amount_yen
-        self._envelope(envelope).allocated_yen += amount_yen
+        if envelope is not None:
+            self._envelope(envelope).allocated_yen += amount_yen
+        else:
+            for name, share in self._split(amount_yen).items():
+                self._envelope(name).allocated_yen += share.allocated_yen
         self._save()
 
     # -- money out ----------------------------------------------------------

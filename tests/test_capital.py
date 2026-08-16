@@ -82,11 +82,20 @@ def test_a_reservation_cannot_be_settled_twice(wallet):
 
 
 def test_confirmed_revenue_raises_the_ceiling(wallet):
+    before = wallet.state.envelopes["experiment"].available_yen
     wallet.record_revenue(5_000)
     assert wallet.state.revenue_yen == 5_000
     assert wallet.cash_yen == 15_000
     assert wallet.net_yen == 5_000
-    assert wallet.request("experiment", 5_500, "次の実験").approved is True
+    # Earnings are split like the opening capital, so most is kept back and
+    # only part widens what the next experiment can spend.
+    assert wallet.state.envelopes["experiment"].available_yen > before
+    assert wallet.request("experiment", 3_000, "次の実験").approved is True
+
+
+def test_revenue_can_be_forced_into_one_envelope(wallet):
+    wallet.record_revenue(5_000, envelope="experiment")
+    assert wallet.state.envelopes["experiment"].available_yen == 7_000
 
 
 def test_revenue_must_be_real_money(wallet):

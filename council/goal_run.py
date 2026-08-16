@@ -234,7 +234,12 @@ class GoalRun:
     def _terminal_check(self, tried: int) -> RunOutcome | None:
         if self.now() - self.started_at >= timedelta(days=self.goal.deadline_days):
             return self._fail("deadline", f"期限{self.goal.deadline_days}日を超えました", tried)
-        if self.spent_yen() >= self.goal.max_loss_yen:
+        # A zero loss cap means "spend nothing", not "stop now". Starting with
+        # no money is the normal case for a company that has not sold anything
+        # yet, and it constrains which strategies exist rather than whether the
+        # run continues. Only money actually spent can end a run this way.
+        spent = self.spent_yen()
+        if spent > 0 and spent >= self.goal.max_loss_yen:
             return self._fail(
                 "max_loss",
                 f"損失上限¥{self.goal.max_loss_yen:,}に到達しました",
