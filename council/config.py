@@ -57,6 +57,23 @@ class ProviderConfig:
 
 
 @dataclass(frozen=True)
+class PaymentConfig:
+    secret_key: str = ""
+    webhook_secret: str = ""
+    success_url: str = ""
+    cancel_url: str = ""
+
+    @property
+    def configured(self) -> bool:
+        return bool(self.secret_key)
+
+    @property
+    def live(self) -> bool:
+        """Live keys move real money and require a verified human behind them."""
+        return self.secret_key.startswith("sk_live_")
+
+
+@dataclass(frozen=True)
 class Settings:
     providers: dict[str, ProviderConfig]
     output_dir: Path
@@ -65,6 +82,7 @@ class Settings:
     max_context_bytes: int
     runtime_dir: Path | None = None
     local_repetitions: int = 3
+    payment: PaymentConfig = PaymentConfig()
 
     @classmethod
     def load(cls, env_file: Path | None = None) -> "Settings":
@@ -150,6 +168,12 @@ class Settings:
                 os.getenv("COUNCIL_RUNTIME_DIR", str(PROJECT_ROOT / ".runtime"))
             ).resolve(),
             local_repetitions=max(2, _int("COUNCIL_LOCAL_REPETITIONS", 3)),
+            payment=PaymentConfig(
+                secret_key=_env("STRIPE_SECRET_KEY"),
+                webhook_secret=_env("STRIPE_WEBHOOK_SECRET"),
+                success_url=os.getenv("STRIPE_SUCCESS_URL", "").strip(),
+                cancel_url=os.getenv("STRIPE_CANCEL_URL", "").strip(),
+            ),
         )
 
     def missing_keys(self) -> list[str]:

@@ -62,3 +62,7 @@ workspaces/
 .backup-*/
 _shot_*.png
 _final_*.png
+
+# Live wallet and payment state. Never commit; these are the company books.
+runs/capital.json
+runs/payments.json

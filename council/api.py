@@ -10,13 +10,22 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Callable
 
-from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile, status
+from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from council.autonomous import GuildlessAutonomousRunner
 from council.config import Settings
+from council.capital import CapitalAllocator
 from council.decision_ledger import DecisionLedger, Outcome
+from council.gates import current_level, locked_capabilities
+from council.payment import (
+    CheckoutRequest,
+    PaymentError,
+    PaymentProcessor,
+    StripeAdapter,
+    WebhookRejected,
+)
 from council.success_validator import validate_deliberation
 from council.guildless import GuildlessOrchestrator
 from council.orchestrator import CouncilOrchestrator
@@ -30,6 +39,7 @@ from council.revenue_engine import (
 )
 from council.v0_engine import V0EngineError, V0LoopManager
 from council.schemas import (
+    CheckoutCreateRequest,
     CouncilRunAccepted,
     CouncilRunRequest,
     DecisionOutcomeRequest,
@@ -64,6 +74,15 @@ ALLOWED_AUDIO_TYPES = {
     "audio/webm", "audio/ogg", "audio/wav", "audio/x-wav", "audio/mpeg",
     "audio/mp4", "video/webm", "application/octet-stream",
 }
+
+
+def _int_env(name: str, default: int) -> int:
+    import os
+
+    try:
+        return int(os.getenv(name, str(default)))
+    except ValueError:
+        return default
 
 
 def _providers_of(run_dir: Path) -> tuple[list[str], str]:
@@ -707,6 +726,29 @@ def create_app(
     app.state.revenue_plans = revenue_plan_manager or RevenuePlanManager(manager.output_root)
     app.state.github_scout = github_scout or GitHubScout()
 
+    resolved = settings or manager.settings
+    app.state.settings = resolved
+    # Payments stay switched off entirely until a key exists, so an unconfigured
+    # deployment cannot be tricked into banking anything.
+    if resolved.payment.configured:
+        app.state.capital = CapitalAllocator(
+            manager.output_root / "capital.json",
+            initial_cash_yen=_int_env("GUILDLESS_INITIAL_CASH_YEN", 5_000),
+        )
+        app.state.payments = PaymentProcessor(
+            manager.output_root / "payments.json",
+            StripeAdapter(
+                resolved.payment.secret_key,
+                resolved.payment.webhook_secret,
+                success_url=resolved.payment.success_url,
+                cancel_url=resolved.payment.cancel_url,
+            ),
+            app.state.capital,
+        )
+    else:
+        app.state.capital = None
+        app.state.payments = None
+
     @app.get("/", include_in_schema=False)
     @app.get("/guildless", include_in_schema=False)
     async def guildless_ui() -> FileResponse:
@@ -815,6 +857,89 @@ def create_app(
             )
         except V0EngineError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @app.post("/v1/payments/checkout")
+    async def create_checkout(request: CheckoutCreateRequest) -> dict[str, Any]:
+        processor = app.state.payments
+        if processor is None:
+            raise HTTPException(status_code=503, detail="STRIPE_SECRET_KEYが未設定です")
+        try:
+            checkout = processor.create_checkout(
+                CheckoutRequest(**request.model_dump())
+            )
+        except PaymentError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from None
+        return {
+            "checkout_id": checkout.checkout_id,
+            "url": checkout.url,
+            "amount_yen": checkout.amount_yen,
+            "status": checkout.status,
+        }
+
+    @app.post("/v1/payments/webhook", include_in_schema=False)
+    async def payment_webhook(request: Request) -> dict[str, Any]:
+        """Receive provider events.
+
+        The raw body is read deliberately: the signature covers those exact
+        bytes, and re-serialising parsed JSON would invalidate it and hand an
+        attacker a way in.
+        """
+        processor = app.state.payments
+        if processor is None:
+            raise HTTPException(status_code=503, detail="決済が設定されていません")
+        body = await request.body()
+        try:
+            checkout = processor.handle_webhook(body, dict(request.headers))
+        except WebhookRejected as exc:
+            # 400, never 200. A provider that gets 200 stops retrying, and a
+            # forged event must not be quietly accepted either.
+            raise HTTPException(status_code=400, detail=str(exc)) from None
+        return {
+            "received": True,
+            "checkout_id": checkout.checkout_id if checkout else None,
+            "status": checkout.status if checkout else None,
+            "real_payments": processor.real_payment_count,
+        }
+
+    @app.get("/v1/payments/status")
+    async def payment_status() -> dict[str, Any]:
+        processor = app.state.payments
+        if processor is None:
+            return {
+                "configured": False,
+                "real_payments": 0,
+                "revenue_yen": 0,
+                "human_tasks": [],
+                "message": "STRIPE_SECRET_KEYが未設定です",
+            }
+        return {
+            "configured": True,
+            "mode": "live" if app.state.settings.payment.live else "test",
+            "real_payments": processor.real_payment_count,
+            "revenue_yen": processor.revenue_yen,
+            "human_tasks": processor.human_tasks(),
+            "checkouts": [
+                {
+                    "checkout_id": c.checkout_id,
+                    "amount_yen": c.amount_yen,
+                    "status": c.status,
+                    "paid_at": c.paid_at,
+                }
+                for c in processor.checkouts.values()
+            ],
+        }
+
+    @app.get("/v1/gates")
+    async def gate_status() -> dict[str, Any]:
+        processor = app.state.payments
+        payments_made = processor.real_payment_count if processor else 0
+        status = current_level(real_payments=payments_made)
+        return {
+            "level": status.level,
+            "reason": status.reason,
+            "real_payments": payments_made,
+            "locked": locked_capabilities(real_payments=payments_made),
+        }
 
     @app.get("/v1/decisions")
     async def list_decisions(limit: int = Query(50, ge=1, le=500)) -> dict[str, Any]:

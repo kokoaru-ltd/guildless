@@ -68,6 +68,15 @@ class FinalDecision(StrictModel):
     confidence: float = Field(ge=0.0, le=1.0)
 
 
+class CheckoutCreateRequest(StrictModel):
+    offer_id: str = Field(min_length=1, max_length=100)
+    description: str = Field(min_length=1, max_length=300)
+    amount_yen: int = Field(ge=50, le=1_000_000)
+    customer_ref: str = Field(min_length=1, max_length=200)
+    experiment_id: str = Field(default="", max_length=100)
+    decision_id: str = Field(default="", max_length=100)
+
+
 class DecisionOutcomeRequest(StrictModel):
     """Counted results of an experiment. Never estimates, only observations."""
 
