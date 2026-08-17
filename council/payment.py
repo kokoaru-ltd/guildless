@@ -34,7 +34,29 @@ from council.capital import CapitalAllocator
 from council.storage import write_json
 
 
-PaymentStatus = Literal["pending", "paid", "failed", "refunded"]
+PaymentStatus = Literal[
+    "pending", "requesting", "unknown_reconciling", "paid", "failed", "refunded"
+]
+
+#: How far a payment has got. Ordering matters: a later event may not move a
+#: payment backwards, because webhook delivery order is not guaranteed and an
+#: old event arriving late must not undo a newer truth.
+STATE_RANK: dict[str, int] = {
+    "pending": 0,
+    "requesting": 1,
+    "unknown_reconciling": 2,
+    "failed": 3,
+    "paid": 4,
+    "refunded": 5,
+}
+
+#: How an unknown outcome may be settled. Guessing is not on the list: the
+#: provider either tells us, or it stays unknown.
+RECONCILIATION_SOURCES: frozenset[str] = frozenset({
+    "idempotent_retry",   # same key, provider returns the original result
+    "provider_lookup",    # GET the object and read its real state
+    "webhook",            # the provider tells us unprompted
+})
 
 
 class PaymentError(Exception):
@@ -43,6 +65,20 @@ class PaymentError(Exception):
 
 class WebhookRejected(PaymentError):
     """The event was not provably from the provider. Never bank these."""
+
+
+class Indeterminate(PaymentError):
+    """The request may or may not have taken effect.
+
+    Raised when a call to the provider times out or the connection drops after
+    the request left. Stripe states plainly that such outcomes are unknown: the
+    charge may have succeeded and only the response was lost. Treating that as
+    "nothing happened" is how a customer gets billed twice.
+    """
+
+    def __init__(self, checkout_id: str, detail: str = ""):
+        super().__init__(detail or f"{checkout_id} の結果が不明です")
+        self.checkout_id = checkout_id
 
 
 @dataclass
@@ -76,6 +112,15 @@ class Checkout:
     #: with real signatures and no funds behind them, so they are tracked
     #: separately rather than counted.
     live: bool = False
+    #: Set when the outcome is unknown, and cleared only by the provider.
+    reconciliation_reason: str = ""
+    #: Semantic identities already applied, so a re-sent event under a new id
+    #: cannot be counted twice.
+    applied_effects: list[str] = field(default_factory=list)
+
+    @property
+    def needs_reconciliation(self) -> bool:
+        return self.status == "unknown_reconciling"
 
 
 @dataclass
@@ -226,6 +271,44 @@ class PaymentProcessor:
         self._save()
         return checkout
 
+    def mark_indeterminate(self, checkout_id: str, reason: str) -> Checkout:
+        """Record that a request went out and its outcome is unknown.
+
+        The only honest state after a timeout. It is deliberately not "failed",
+        because retrying a charge that actually succeeded takes money from a
+        real person twice.
+        """
+        checkout = self.checkouts.get(checkout_id)
+        if checkout is None:
+            raise WebhookRejected(f"unknown checkout: {checkout_id}")
+        self._advance(checkout, "unknown_reconciling")
+        checkout.reconciliation_reason = reason[:200]
+        self._save()
+        return checkout
+
+    def reconcile(
+        self, checkout_id: str, *, source: str, status: PaymentStatus,
+        amount_yen: int = 0, live: bool = False,
+    ) -> Checkout:
+        """Settle an unknown outcome, using only what the provider said."""
+        if source not in RECONCILIATION_SOURCES:
+            raise PaymentError(
+                f"{source}では不明状態を解決できません。"
+                f"許可されるのは{sorted(RECONCILIATION_SOURCES)}のみです。"
+            )
+        checkout = self.checkouts.get(checkout_id)
+        if checkout is None:
+            raise WebhookRejected(f"unknown checkout: {checkout_id}")
+        if status == "paid":
+            if amount_yen and amount_yen != checkout.amount_yen:
+                raise WebhookRejected("reconciliation amount does not match the order")
+            self._apply_payment(checkout, live=live, effect_key=f"paid:{checkout_id}")
+        else:
+            self._advance(checkout, status)
+        checkout.reconciliation_reason = f"{source}で解決"
+        self._save()
+        return checkout
+
     def handle_webhook(self, body: bytes, headers: dict[str, str]) -> Checkout | None:
         """Bank a confirmed payment. Raises rather than banking anything doubtful."""
         event = self.adapter.parse_webhook(body, headers)
@@ -238,28 +321,48 @@ class PaymentProcessor:
         if checkout is None:
             raise WebhookRejected(f"unknown checkout: {event.checkout_id}")
 
-        if event.status == "paid" and checkout.status != "paid":
+        if event.status == "paid":
             if event.amount_yen and event.amount_yen != checkout.amount_yen:
                 raise WebhookRejected(
                     f"amount mismatch: expected ¥{checkout.amount_yen}, event says ¥{event.amount_yen}"
                 )
-            checkout.status = "paid"
-            checkout.paid_at = datetime.now(UTC).isoformat()
             checkout.fee_yen = event.fee_yen
-            checkout.live = event.live
-            # Test-mode money never reaches the wallet. Banking it would let a
-            # correct integration look like a funded company.
-            if event.live:
-                self.capital.record_revenue(checkout.amount_yen - event.fee_yen)
-        elif event.status == "refunded" and checkout.status == "paid":
-            checkout.status = "refunded"
-        elif event.status == "failed":
-            checkout.status = "failed"
+            # Keyed on what happened rather than on the event id. Providers
+            # re-send under fresh ids, and two different ids describing the
+            # same payment must still only be banked once.
+            self._apply_payment(
+                checkout, live=event.live, effect_key=f"paid:{checkout.checkout_id}"
+            )
+        else:
+            self._advance(checkout, event.status)
 
         if event.event_id:
             self.handled_events.add(event.event_id)
         self._save()
         return checkout
+
+    # -- state transitions ---------------------------------------------------
+
+    def _advance(self, checkout: Checkout, status: PaymentStatus) -> bool:
+        """Move forward only. Webhook order is not guaranteed by the provider,
+        so a late-arriving old event must not undo a newer truth."""
+        if STATE_RANK.get(status, -1) <= STATE_RANK.get(checkout.status, -1):
+            return False
+        checkout.status = status
+        return True
+
+    def _apply_payment(self, checkout: Checkout, *, live: bool, effect_key: str) -> None:
+        if effect_key in checkout.applied_effects:
+            return
+        if not self._advance(checkout, "paid"):
+            return
+        checkout.applied_effects.append(effect_key)
+        checkout.paid_at = datetime.now(UTC).isoformat()
+        checkout.live = live
+        # Test-mode money never reaches the wallet. Banking it would let a
+        # correct integration look like a funded company.
+        if live:
+            self.capital.record_revenue(checkout.amount_yen - checkout.fee_yen)
 
     # -- reading ------------------------------------------------------------
 

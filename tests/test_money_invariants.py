@@ -204,3 +204,122 @@ def test_a_failed_webhook_leaves_no_revenue(payments, wallet, adapter):
     with pytest.raises(WebhookRejected):
         payments.handle_webhook(body, headers)
     assert wallet.state.revenue_yen == 0
+
+
+# --- P7 corrected: an interrupted request is unknown, not "nothing happened" --
+
+def test_a_timeout_after_the_request_is_never_treated_as_not_started(payments):
+    """Stripe states such outcomes are indeterminate: the charge may have
+    succeeded and only the response was lost."""
+    checkout = order(payments, 30_000)
+    payments.mark_indeterminate(checkout.checkout_id, "connection reset")
+
+    assert checkout.status == "unknown_reconciling"
+    assert checkout.needs_reconciliation is True
+    assert checkout.status != "pending"
+    assert checkout.status != "failed"
+
+
+# --- P8: an unknown outcome never counts either way ------------------------
+
+def test_an_unknown_outcome_is_not_revenue_and_not_failure(payments, wallet):
+    checkout = order(payments, 30_000)
+    payments.mark_indeterminate(checkout.checkout_id, "timeout")
+    assert payments.real_payment_count == 0
+    assert wallet.state.revenue_yen == 0
+
+
+# --- P9: only the provider may settle it -----------------------------------
+
+@pytest.mark.parametrize("source", ["idempotent_retry", "provider_lookup", "webhook"])
+def test_the_provider_can_settle_an_unknown_outcome(payments, wallet, source):
+    checkout = order(payments, 30_000)
+    payments.mark_indeterminate(checkout.checkout_id, "timeout")
+    payments.reconcile(
+        checkout.checkout_id, source=source, status="paid",
+        amount_yen=30_000, live=True,
+    )
+    assert checkout.status == "paid"
+    assert wallet.state.revenue_yen == 30_000
+
+
+@pytest.mark.parametrize("source", ["agent_guess", "assumed_success", "local_db", "retry_blindly"])
+def test_nothing_else_may_settle_it(payments, source):
+    from council.payment import PaymentError
+
+    checkout = order(payments, 30_000)
+    payments.mark_indeterminate(checkout.checkout_id, "timeout")
+    with pytest.raises(PaymentError):
+        payments.reconcile(checkout.checkout_id, source=source, status="paid", live=True)
+    assert checkout.status == "unknown_reconciling"
+
+
+def test_reconciling_to_failed_leaves_no_revenue(payments, wallet):
+    checkout = order(payments, 30_000)
+    payments.mark_indeterminate(checkout.checkout_id, "timeout")
+    payments.reconcile(checkout.checkout_id, source="provider_lookup", status="failed")
+    assert checkout.status == "failed"
+    assert wallet.state.revenue_yen == 0
+
+
+# --- P10: late events may not move a payment backwards ---------------------
+
+def test_an_out_of_order_event_cannot_undo_a_payment(payments, wallet, adapter):
+    checkout = order(payments, 30_000)
+    payments.handle_webhook(*event(adapter, checkout, live=True, event_id="evt_paid"))
+    assert checkout.status == "paid"
+
+    stale, headers = adapter.sign({
+        "id": "evt_expired_but_late", "type": "checkout.session.expired", "livemode": True,
+        "data": {"object": {"id": checkout.checkout_id, "payment_status": "unpaid"}},
+    })
+    payments.handle_webhook(stale, headers)
+
+    assert checkout.status == "paid"
+    assert wallet.state.revenue_yen == 30_000
+
+
+def test_a_refund_still_moves_forward(payments, adapter):
+    checkout = order(payments, 30_000)
+    payments.handle_webhook(*event(adapter, checkout, live=True, event_id="evt_paid"))
+    body, headers = adapter.sign({
+        "id": "evt_refund", "type": "charge.refunded", "livemode": True,
+        "data": {"object": {"id": checkout.checkout_id, "payment_status": "paid"}},
+    })
+    payments.handle_webhook(body, headers)
+    assert checkout.status == "refunded"
+
+
+# --- P11: the same payment under a new event id is still one payment -------
+
+def test_the_same_payment_resent_under_a_new_id_is_not_counted_twice(
+    payments, wallet, adapter
+):
+    checkout = order(payments, 30_000)
+    payments.handle_webhook(*event(adapter, checkout, live=True, event_id="evt_first"))
+    payments.handle_webhook(*event(adapter, checkout, live=True, event_id="evt_second"))
+    payments.handle_webhook(*event(adapter, checkout, live=True, event_id="evt_third"))
+
+    assert payments.real_payment_count == 1
+    assert wallet.state.revenue_yen == 30_000
+
+
+def test_reconciliation_after_a_webhook_does_not_double_bank(payments, wallet, adapter):
+    checkout = order(payments, 30_000)
+    payments.handle_webhook(*event(adapter, checkout, live=True, event_id="evt_paid"))
+    payments.reconcile(
+        checkout.checkout_id, source="provider_lookup", status="paid",
+        amount_yen=30_000, live=True,
+    )
+    assert wallet.state.revenue_yen == 30_000
+    assert payments.real_payment_count == 1
+
+
+# --- capital must always account for every yen -----------------------------
+
+@pytest.mark.parametrize("cash", [1, 500, 5_000, 10_001, 999_999])
+def test_every_yen_is_in_a_named_envelope(tmp_path, cash):
+    wallet = CapitalAllocator(tmp_path / f"c{cash}.json", initial_cash_yen=cash)
+    breakdown = {n: e.allocated_yen for n, e in wallet.state.envelopes.items()}
+    assert sum(breakdown.values()) == cash
+    assert set(breakdown) == {"reserve", "experiment", "ai_api", "emergency"}

@@ -130,10 +130,21 @@ def _audit_capital(runs: Path, report: StateAudit) -> None:
     report.add("spent_yen", spent, "runs/capital.json")
     report.add("capital_yen", initial + revenue - spent, "runs/capital.json")
     report.add("net_yen", revenue - spent, "runs/capital.json")
-    report.add(
-        "reserve_yen", int((envelopes.get("reserve") or {}).get("allocated_yen", 0)),
-        "runs/capital.json",
-    )
+    # Every envelope, always, and never a subset. A financial view that shows
+    # 3,500 and 1,000 out of 5,000 invites the reader to wonder where the other
+    # 500 went, and a money screen that prompts that question has already lost.
+    breakdown = {
+        name: int(envelope.get("allocated_yen", 0))
+        for name, envelope in sorted(envelopes.items())
+    }
+    report.add("capital_breakdown_yen", breakdown, "runs/capital.json")
+
+    total = sum(breakdown.values())
+    report.add("capital_breakdown_total_yen", total, "runs/capital.json")
+    if total != initial + revenue:
+        report.warnings.append(
+            f"予算配分の合計¥{total:,}が資本¥{initial + revenue:,}と一致しません"
+        )
     report.add(
         "experiment_available_yen",
         max(0, int((envelopes.get("experiment") or {}).get("allocated_yen", 0))
