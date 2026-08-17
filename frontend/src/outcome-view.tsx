@@ -1,85 +1,60 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  AlertTriangle, CheckCircle2, CircleSlash, Flame, Languages,
-  LoaderCircle, MessageSquare, X,
+  AlertTriangle, Check, ChevronRight, CircleStop, Flame, Languages,
+  LoaderCircle, Mic, Terminal, X,
 } from 'lucide-react'
 import { LANGS, type Lang, dict, loadLang, saveLang } from '@/lib/i18n'
 
 /**
- * The control centre. Full width, because this is the window the company runs
- * in rather than a document being read — a centred column wastes the space a
- * desktop app was installed to use.
+ * The product, not a dashboard over it.
  *
- * Laid out like a workspace: a narrow rail for state that is always true, and
- * everything else in the main area. Five seconds must still answer four
- * questions — how much real money, where it is stuck, what it is doing, and
- * whether the reader has to act — so those four are the largest things on it.
+ * Someone who hands over an idea wants one thing: how far has it got toward
+ * money. So the run is a single path of eight business stages with exactly one
+ * marked current, and opening a stage says what was decided, why, what was
+ * actually done, what that revealed, and what comes next.
  *
- * Chat is a drawer. A conversation in the middle makes this an assistant, and
- * an assistant is something you have to operate.
+ * The worker's own steps — observe, diagnose, classify — are absent. They repeat
+ * every twenty seconds and tell a reader nothing about their idea. They remain
+ * reachable behind a developer panel, where a pulse belongs.
  */
 
-type HumanTask = { task: string; title: string; detail: string }
-type Evidence = {
-  kind: string; source: string; detail: string; at?: string
-  counts_as_revenue: boolean; note: string
+type Stage = {
+  id: string; title: string; state: 'done' | 'current' | 'pending' | 'failed'
+  summary: string; decided: string; why: string; did: string; learned: string; next: string
 }
-type Failure = { what: string; detail: string; learning: string }
+type HumanTask = { task: string; title: string; detail: string }
 
 type Outcome = {
   verified_net_outcome_yen: number
-  goal: string
   spark?: string
-  status: 'RUNNING' | 'BLOCKED' | 'HUMAN_REQUIRED' | 'SUCCESS' | 'TERMINAL_FAILURE'
+  status: string
   bottleneck: string
   current_action: string
-  money: {
-    starting_capital_yen: number; available_yen: number; reserved_yen: number
-    spent_yen: number; verified_revenue_yen: number
-    breakdown_yen: Record<string, number>
-  }
-  strategy: {
-    offer?: string; price_yen?: number; chosen_because: string
-    rejected: { name: string; reasons: string[] }[]
-  }
-  evidence: Evidence[]
-  failures: Failure[]
+  money: { starting_capital_yen: number; available_yen: number; spent_yen: number }
+  strategy: { offer?: string; price_yen?: number; chosen_because: string; rejected: { name: string; reasons: string[] }[] }
   human_required: HumanTask[]
-  gate: { level: string; real_payments: number }
-  engine?: {
-    state: string; alive: boolean; ticks: number; current_step: string; error: string
-    activity: { at: string; step: string; detail: string; external: boolean }[]
-  }
-  external_action?: { granted: boolean; note: string }
-  excluded_from_totals: { test_payments: number; note: string }
-}
-
-const TONE: Record<string, { chip: string; dot: string }> = {
-  RUNNING: { chip: 'text-[#276453] bg-[#edf5f1] border-[#c3ddcf]', dot: 'bg-[#276453]' },
-  BLOCKED: { chip: 'text-[#8a6410] bg-[#fdf6e7] border-[#e4cfa6]', dot: 'bg-[#8a6410]' },
-  HUMAN_REQUIRED: { chip: 'text-[#a94712] bg-[#fff1e9] border-[#efc8b7]', dot: 'bg-[#ff4801]' },
-  SUCCESS: { chip: 'text-[#276453] bg-[#edf5f1] border-[#c3ddcf]', dot: 'bg-[#276453]' },
-  TERMINAL_FAILURE: { chip: 'text-[#b3261e] bg-[#ffebe9] border-[#f5b5b0]', dot: 'bg-[#b3261e]' },
+  journey?: { stages: Stage[]; position: number; total: number }
+  engine?: { alive: boolean; activity: { at: string; step: string; detail: string; external: boolean }[] }
+  excluded_from_totals: { test_payments: number }
 }
 
 const yen = (value: number) => `¥${Math.round(value || 0).toLocaleString('ja-JP')}`
 
 export function OutcomeView() {
   const [data, setData] = useState<Outcome | null>(null)
-  const [error, setError] = useState('')
-  const [drawer, setDrawer] = useState(false)
+  const [failed, setFailed] = useState(false)
   const [lang, setLang] = useState<Lang>(() => loadLang())
+  const [openStage, setOpenStage] = useState<string | null>(null)
+  const [devOpen, setDevOpen] = useState(false)
   const t = dict(lang)
 
   const load = useCallback(async () => {
     try {
       const response = await fetch('/v1/outcome')
-      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      if (!response.ok) throw new Error()
       setData(await response.json())
-      setError('')
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'unavailable')
-    }
+      setFailed(false)
+    } catch { setFailed(true) }
   }, [])
 
   useEffect(() => {
@@ -90,326 +65,360 @@ export function OutcomeView() {
 
   const changeLang = (next: Lang) => { setLang(next); saveLang(next) }
 
-  if (error && !data) {
-    return <Shell lang={lang} onLang={changeLang} t={t}>
-      <div className='grid h-full place-items-center'>
-        <div className='rounded-xl border border-red-200 bg-red-50 px-6 py-4 text-sm text-red-700'>
-          {error}
-        </div>
-      </div>
-    </Shell>
-  }
-  if (!data) {
-    return <Shell lang={lang} onLang={changeLang} t={t}>
-      <div className='grid h-full place-items-center'>
-        <LoaderCircle className='size-5 animate-spin text-[#817d76]' />
-      </div>
-    </Shell>
-  }
+  if (failed && !data) return <Centre><p className='text-sm text-red-700'>{t.unreachable}</p></Centre>
+  if (!data) return <Centre><LoaderCircle className='size-5 animate-spin text-[#817d76]' /></Centre>
+  if (!data.spark) return <Home t={t} lang={lang} onLang={changeLang} onStarted={load} />
 
-  // Nothing has been started, so the only thing on screen is how to start it.
-  if (!data.spark) {
-    return <Shell lang={lang} onLang={changeLang} t={t}>
-      <SparkGate t={t} onStarted={load} />
-    </Shell>
-  }
-
-  const tone = TONE[data.status] || TONE.RUNNING
-  const money = data.money
+  const journey = data.journey
   const needsHuman = data.human_required.length > 0
+  const detail = journey?.stages.find(s => s.id === openStage)
 
-  return <Shell
-    lang={lang} onLang={changeLang} t={t}
-    rail={<Rail data={data} tone={tone} t={t} />}
-    onAsk={() => setDrawer(true)}
-  >
-    <div className='grid gap-4 p-6 xl:grid-cols-2 2xl:grid-cols-3'>
-      {needsHuman && (
-        <section className='rounded-xl border-2 border-[#ff4801] bg-[#fff1e9] p-6 xl:col-span-2 2xl:col-span-3'>
-          <p className='flex items-center gap-2 text-xs font-bold text-[#a94712]'>
-            <AlertTriangle className='size-4' />{t.humanNeeded}
-          </p>
-          {data.human_required.map(task => (
-            <div key={task.task} className='mt-3'>
-              <p className='text-lg font-semibold'>{task.title}</p>
-              <p className='mt-1 text-sm leading-6 text-[#6f6b64]'>{task.detail}</p>
-            </div>
-          ))}
-        </section>
-      )}
+  return <div className='flex h-svh w-full flex-col overflow-hidden bg-[#f7f7f5] text-[#20201e]'>
+    <header className='flex h-12 shrink-0 items-center gap-3 border-b border-[#dedbd4] bg-white px-5'>
+      <span className='text-sm font-semibold tracking-tight'>Guildless</span>
+      <div className='ml-auto flex items-center gap-2'>
+        <LangPicker lang={lang} onLang={changeLang} />
+        <button
+          onClick={() => setDevOpen(true)}
+          className='rounded-lg border border-[#dedbd4] p-1.5 text-[#99958d] hover:bg-[#f3f1ed]'
+          title={t.devDetails}
+        ><Terminal className='size-3.5' /></button>
+      </div>
+    </header>
 
-      <Card title={t.money}>
-        <Row label={t.startingCapital} value={yen(money.starting_capital_yen)} />
-        <Row label={t.available} value={yen(money.available_yen)} />
-        <Row label={t.reserved} value={yen(money.reserved_yen)} muted />
-        <Row label={t.spent} value={yen(money.spent_yen)} />
-        <Row label={t.verifiedRevenue} value={yen(money.verified_revenue_yen)} strong />
-        <div className='mt-3 border-t border-[#ece9e3] pt-2'>
-          {Object.entries(money.breakdown_yen).map(([name, amount]) => (
-            <div key={name} className='flex justify-between py-0.5 text-[11px] text-[#99958d]'>
-              <span>{name}</span><span className='tabular-nums'>{yen(amount)}</span>
-            </div>
-          ))}
-        </div>
-      </Card>
+    <main className='min-h-0 flex-1 overflow-y-auto'>
+      <div className='mx-auto max-w-[1000px] px-8 py-8'>
 
-      <Card title={t.trying}>
-        {data.strategy.offer ? <>
-          <p className='text-sm font-semibold leading-6'>{data.strategy.offer}</p>
-          {data.strategy.price_yen ? (
-            <p className='mt-1 text-xs text-[#817d76]'>{yen(data.strategy.price_yen)}</p>
-          ) : null}
-          <p className='mt-3 text-xs leading-5 text-[#6f6b64]'>
-            {t.chosenBecause}：{data.strategy.chosen_because}
-          </p>
-          {data.strategy.rejected.length > 0 && (
-            <div className='mt-3 border-t border-[#ece9e3] pt-2'>
-              <p className='text-[11px] font-medium text-[#99958d]'>{t.rejected}</p>
-              {data.strategy.rejected.map(item => (
-                <p key={item.name} className='py-0.5 text-[11px] leading-4 text-[#99958d]'>
-                  {item.name} — {item.reasons[0]}
-                </p>
-              ))}
-            </div>
-          )}
-        </> : <p className='text-sm text-[#817d76]'>{t.notSelected}</p>}
-      </Card>
+        {/* 1. What I asked for, and what it has produced. */}
+        <p className='text-xs font-medium text-[#817d76]'>{t.iAskedFor}</p>
+        <h1 className='mt-1 text-2xl font-semibold leading-9'>{data.spark}</h1>
 
-      <Card title={t.evidence}>
-        {data.evidence.length ? data.evidence.map((item, index) => (
-          <div key={index} className='border-b border-[#ece9e3] py-2 last:border-0'>
-            <div className='flex items-center gap-2'>
-              {item.counts_as_revenue
-                ? <CheckCircle2 className='size-3.5 shrink-0 text-[#1a7f37]' />
-                : <CircleSlash className='size-3.5 shrink-0 text-[#aaa69e]' />}
-              <p className='text-xs font-medium'>{item.source} · {item.detail}</p>
-            </div>
-            {item.note && <p className='mt-1 pl-5 text-[11px] leading-4 text-[#a94712]'>{item.note}</p>}
+        <div className='mt-6 flex flex-wrap items-end gap-x-10 gap-y-4'>
+          <div>
+            <p className='text-xs font-medium text-[#817d76]'>{t.netOutcome}</p>
+            <p className={`mt-0.5 text-5xl font-semibold leading-none tabular-nums ${
+              data.verified_net_outcome_yen > 0 ? 'text-[#1a7f37]' : ''
+            }`}>{yen(data.verified_net_outcome_yen)}</p>
           </div>
-        )) : <p className='text-sm text-[#817d76]'>{t.noEvidence}</p>}
-      </Card>
-
-      <section className='rounded-xl border border-[#dedbd4] bg-white p-6 xl:col-span-2 2xl:col-span-3'>
-        <div className='flex items-center gap-2'>
-          <p className='text-xs font-medium text-[#817d76]'>{t.activity}</p>
-          {data.engine && (
-            <span className={`ml-auto flex items-center gap-1.5 text-[11px] ${
-              data.engine.alive ? 'text-[#276453]' : 'text-[#b3261e]'
-            }`}>
-              <span className={`size-1.5 rounded-full ${
-                data.engine.alive ? 'animate-pulse bg-[#276453]' : 'bg-[#b3261e]'
-              }`} />
-              {data.engine.alive ? t.engineAlive(data.engine.ticks) : t.engineDead}
-            </span>
-          )}
+          <Metric label={t.startingCapital} value={yen(data.money.starting_capital_yen)} />
+          <Metric label={t.spent} value={yen(data.money.spent_yen)} />
+          {journey && <Metric label={t.stageOf} value={`${journey.position} / ${journey.total}`} />}
+          <Metric
+            label={t.yourAction}
+            value={needsHuman ? t.actionRequired : t.actionNone}
+            alert={needsHuman}
+          />
         </div>
-        {data.engine?.activity?.length ? (
-          <ol className='mt-3 space-y-1.5'>
-            {data.engine.activity.map((item, index) => (
-              <li key={index} className='flex gap-3 text-xs leading-5'>
-                <span className='shrink-0 tabular-nums text-[#c4c0b8]'>
-                  {item.at.slice(11, 19)}
-                </span>
-                <span className={`shrink-0 font-medium ${
-                  item.external ? 'text-[#a94712]' : 'text-[#817d76]'
-                }`}>{item.step}</span>
-                <span className='min-w-0 text-[#4d4a45]'>{item.detail}</span>
-              </li>
+
+        {needsHuman && <Approval tasks={data.human_required} t={t} />}
+
+        {/* 2. The single path, with one position marked. */}
+        {journey && (
+          <ol className='mt-8'>
+            {journey.stages.map((stage, index) => (
+              <StageRow
+                key={stage.id} stage={stage} t={t}
+                last={index === journey.stages.length - 1}
+                onOpen={() => setOpenStage(stage.id)}
+              />
             ))}
           </ol>
-        ) : (
-          <p className='mt-3 text-sm text-[#817d76]'>{t.noActivity}</p>
         )}
-      </section>
 
-      {data.failures.length > 0 && (
-        <section className='rounded-xl border border-[#dedbd4] bg-white p-6 xl:col-span-2 2xl:col-span-3'>
-          <p className='text-xs font-medium text-[#817d76]'>{t.failures}</p>
-          <div className='mt-3 grid gap-4 lg:grid-cols-2'>
-            {data.failures.map((failure, index) => (
-              <div key={index} className='rounded-lg bg-[#f7f7f5] p-4'>
-                <p className='text-sm font-medium'>{failure.what}</p>
-                {failure.detail && <p className='mt-1 text-xs leading-5 text-[#817d76]'>{failure.detail}</p>}
-                <p className='mt-2 border-l-2 border-[#ff4801] pl-2 text-xs leading-5 text-[#4d4a45]'>
-                  {failure.learning}
-                </p>
-              </div>
+        {/* 3. The strategy, so the reasoning is visible without a thought log. */}
+        {data.strategy.offer && (
+          <section className='mt-8 rounded-xl border border-[#dedbd4] bg-white p-6'>
+            <p className='text-xs font-medium text-[#817d76]'>{t.plan}</p>
+            <p className='mt-2 text-sm font-semibold'>{data.strategy.offer}
+              {data.strategy.price_yen ? <span className='ml-2 font-normal text-[#817d76]'>
+                {yen(data.strategy.price_yen)}</span> : null}
+            </p>
+            <p className='mt-1.5 text-xs leading-5 text-[#6f6b64]'>{data.strategy.chosen_because}</p>
+            {data.strategy.rejected.map(item => (
+              <p key={item.name} className='mt-1 text-[11px] leading-4 text-[#aaa69e]'>
+                {t.rejected}：{item.name} — {item.reasons[0]}
+              </p>
             ))}
-          </div>
-        </section>
-      )}
-    </div>
+          </section>
+        )}
 
-    {drawer && <Drawer t={t} onClose={() => setDrawer(false)} />}
-  </Shell>
-}
+        {/* 4. Events only. A pulse is not an event. */}
+        {data.engine?.activity?.length ? (
+          <section className='mt-6'>
+            <p className='text-xs font-medium text-[#817d76]'>{t.changes}</p>
+            <ol className='mt-2 space-y-1'>
+              {data.engine.activity.map((item, index) => (
+                <li key={index} className='flex gap-3 text-xs leading-6'>
+                  <span className='shrink-0 tabular-nums text-[#c4c0b8]'>{item.at.slice(11, 16)}</span>
+                  <span className={item.external ? 'text-[#a94712]' : 'text-[#4d4a45]'}>{item.detail}</span>
+                </li>
+              ))}
+            </ol>
+          </section>
+        ) : null}
+      </div>
+    </main>
 
-/** Full-bleed frame: rail, header, scrolling main area. */
-function Shell({ children, rail, lang, onLang, t, onAsk }: {
-  children: React.ReactNode; rail?: React.ReactNode
-  lang: Lang; onLang: (l: Lang) => void; t: ReturnType<typeof dict>
-  onAsk?: () => void
-}) {
-  return <div className='flex h-svh w-full overflow-hidden bg-[#f7f7f5] text-[#20201e]'>
-    {rail && <aside className='hidden w-[300px] shrink-0 flex-col overflow-y-auto border-r border-[#dedbd4] bg-white lg:flex'>
-      {rail}
-    </aside>}
-
-    <div className='flex min-w-0 flex-1 flex-col'>
-      <header className='flex h-12 shrink-0 items-center gap-3 border-b border-[#dedbd4] bg-white px-5'>
-        <span className='text-sm font-semibold tracking-tight'>Guildless</span>
-        <span className='hidden truncate text-xs text-[#99958d] md:block'>{t.appTagline}</span>
-        <div className='ml-auto flex items-center gap-2'>
-          <div className='flex items-center rounded-lg border border-[#dedbd4] p-0.5'>
-            <Languages className='mx-1.5 size-3.5 text-[#99958d]' />
-            {LANGS.map(item => (
-              <button
-                key={item.id}
-                onClick={() => onLang(item.id)}
-                className={`rounded-md px-2 py-1 text-[11px] transition-colors ${
-                  lang === item.id ? 'bg-[#171513] text-white' : 'text-[#6f6b64] hover:bg-[#f3f1ed]'
-                }`}
-              >{item.label}</button>
-            ))}
-          </div>
-          {onAsk && (
-            <button
-              onClick={onAsk}
-              className='flex items-center gap-1.5 rounded-lg border border-[#dedbd4] px-3 py-1.5 text-xs text-[#6f6b64] hover:bg-[#f3f1ed]'
-            ><MessageSquare className='size-3.5' />{t.ask}</button>
-          )}
-        </div>
-      </header>
-      <main className='min-h-0 flex-1 overflow-y-auto'>{children}</main>
-    </div>
+    {detail && <StageDetail stage={detail} t={t} onClose={() => setOpenStage(null)} />}
+    {devOpen && <DevPanel t={t} onClose={() => setDevOpen(false)} />}
   </div>
 }
 
-/** The four answers, always visible, never scrolled away. */
-function Rail({ data, tone, t }: {
-  data: Outcome; tone: { chip: string; dot: string }; t: ReturnType<typeof dict>
+function StageRow({ stage, t, last, onOpen }: {
+  stage: Stage; t: ReturnType<typeof dict>; last: boolean; onOpen: () => void
 }) {
-  return <div className='flex flex-col gap-5 p-6'>
-    <div>
-      <p className='text-xs font-medium text-[#817d76]'>{t.netOutcome}</p>
-      <p className={`mt-1 text-5xl font-semibold leading-none tracking-tight tabular-nums ${
-        data.verified_net_outcome_yen > 0 ? 'text-[#1a7f37]' : ''
-      }`}>{yen(data.verified_net_outcome_yen)}</p>
-      <p className='mt-2 text-[11px] leading-4 text-[#99958d]'>
-        {t.netOutcomeNote}
-        {data.excluded_from_totals.test_payments > 0
-          && ` ${t.testExcluded(data.excluded_from_totals.test_payments)}`}
-      </p>
+  const done = stage.state === 'done'
+  const current = stage.state === 'current'
+  return <li className='relative flex gap-4'>
+    <div className='flex flex-col items-center'>
+      <span className={`grid size-6 shrink-0 place-items-center rounded-full border-2 ${
+        done ? 'border-[#276453] bg-[#276453] text-white'
+          : current ? 'border-[#ff4801] bg-white' : 'border-[#dedbd4] bg-white'
+      }`}>
+        {done ? <Check className='size-3.5' />
+          : current ? <span className='size-2 animate-pulse rounded-full bg-[#ff4801]' /> : null}
+      </span>
+      {!last && <span className={`w-0.5 flex-1 ${done ? 'bg-[#276453]' : 'bg-[#e6e4df]'}`} />}
     </div>
 
-    <div className={`rounded-xl border px-4 py-3 ${tone.chip}`}>
+    <button
+      onClick={onOpen}
+      className={`group mb-4 min-w-0 flex-1 rounded-lg px-3 py-2 text-left transition-colors hover:bg-white ${
+        current ? 'bg-white ring-1 ring-[#ffd4c0]' : ''
+      }`}
+    >
       <div className='flex items-center gap-2'>
-        <span className={`size-2 rounded-full ${tone.dot}`} />
-        <p className='text-sm font-semibold'>{t.statusLabels[data.status] || data.status}</p>
+        <p className={`text-sm ${current ? 'font-semibold' : done ? 'font-medium' : 'text-[#99958d]'}`}>
+          {stage.title}
+        </p>
+        {current && <span className='rounded-full bg-[#fff1e9] px-2 py-0.5 text-[10px] font-semibold text-[#a94712]'>
+          {t.hereNow}
+        </span>}
+        <ChevronRight className='ml-auto size-3.5 shrink-0 text-[#c4c0b8] opacity-0 transition-opacity group-hover:opacity-100' />
       </div>
-    </div>
-
-    <div>
-      <p className='text-xs font-medium text-[#817d76]'>{t.bottleneck}</p>
-      <p className='mt-1.5 text-sm font-medium leading-6'>{data.bottleneck}</p>
-    </div>
-
-    <div>
-      <p className='text-xs font-medium text-[#817d76]'>{t.doingNow}</p>
-      <p className='mt-1.5 text-sm leading-6 text-[#4d4a45]'>{data.current_action}</p>
-    </div>
-
-    {data.spark && (
-      <div className='border-t border-[#ece9e3] pt-4'>
-        <p className='text-xs font-medium text-[#817d76]'>{t.spark}</p>
-        <p className='mt-1.5 text-xs leading-5 text-[#6f6b64]'>{data.spark}</p>
-      </div>
-    )}
-
-    <div className='mt-auto space-y-1 border-t border-[#ece9e3] pt-4 text-[11px] text-[#aaa69e]'>
-      <p>{t.gate} {data.gate.level} · {t.confirmedPayments} {data.gate.real_payments}</p>
-      {data.external_action && (
-        <p>{t.externalAction} {data.external_action.granted ? t.granted : t.notGranted}</p>
+      {stage.summary && (
+        <p className={`mt-0.5 text-xs leading-5 ${current ? 'text-[#4d4a45]' : 'text-[#99958d]'}`}>
+          {stage.summary}
+        </p>
       )}
-    </div>
-  </div>
+    </button>
+  </li>
 }
 
-/** First run: one field, because a plan is not required to begin. */
-function SparkGate({ t, onStarted }: { t: ReturnType<typeof dict>; onStarted: () => void }) {
-  const [text, setText] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
-
-  const ignite = async () => {
-    if (!text.trim()) return
-    setBusy(true); setError('')
-    try {
-      const response = await fetch('/v1/spark', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ statement: text.trim() }),
-      })
-      if (!response.ok) throw new Error(`HTTP ${response.status}`)
-      onStarted()
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'failed')
-      setBusy(false)
-    }
-  }
-
-  return <div className='grid h-full place-items-center p-8'>
-    <div className='w-full max-w-2xl'>
-      <p className='flex items-center gap-2 text-xs font-medium text-[#817d76]'>
-        <Flame className='size-4 text-[#ff4801]' />{t.spark}
-      </p>
-      <textarea
-        autoFocus value={text} onChange={event => setText(event.target.value)}
-        placeholder={t.sparkPlaceholder}
-        className='mt-3 h-32 w-full resize-none rounded-xl border border-[#dedbd4] bg-white p-5 text-lg leading-8 outline-none focus:border-[#ff6b32] placeholder:text-[#c4c0b8]'
-      />
-      <p className='mt-2 text-xs text-[#99958d]'>{t.sparkHelp}</p>
-      {error && <p className='mt-2 text-xs text-red-700'>{error}</p>}
-      <button
-        onClick={ignite} disabled={!text.trim() || busy}
-        className='mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#ff4801] text-base font-semibold text-white transition-colors hover:bg-[#e04400] disabled:bg-[#dedbd4]'
-      >
-        {busy ? <LoaderCircle className='size-4 animate-spin' /> : <Flame className='size-4' />}
-        {t.ignite}
-      </button>
-    </div>
-  </div>
-}
-
-function Card({ title, children }: { title: string; children: React.ReactNode }) {
-  return <div className='rounded-xl border border-[#dedbd4] bg-white p-6'>
-    <p className='text-xs font-medium text-[#817d76]'>{title}</p>
-    <div className='mt-3'>{children}</div>
-  </div>
-}
-
-function Row({ label, value, muted = false, strong = false }: {
-  label: string; value: string; muted?: boolean; strong?: boolean
+function StageDetail({ stage, t, onClose }: {
+  stage: Stage; t: ReturnType<typeof dict>; onClose: () => void
 }) {
-  return <div className='flex items-baseline justify-between py-1'>
-    <span className='text-xs text-[#817d76]'>{label}</span>
-    <span className={`text-sm tabular-nums ${strong ? 'font-semibold' : ''} ${muted ? 'text-[#aaa69e]' : ''}`}>
-      {value}
-    </span>
-  </div>
-}
+  const rows = [
+    [t.decided, stage.decided], [t.why, stage.why],
+    [t.did, stage.did], [t.learned, stage.learned], [t.next, stage.next],
+  ].filter(([, value]) => value)
 
-function Drawer({ t, onClose }: { t: ReturnType<typeof dict>; onClose: () => void }) {
   return <>
-    <button className='fixed inset-0 z-30 bg-black/20' onClick={onClose} aria-label={t.close} />
-    <aside className='fixed inset-y-0 right-0 z-40 flex w-[380px] flex-col border-l border-[#dedbd4] bg-white'>
-      <div className='flex items-center justify-between border-b border-[#ece9e3] px-5 py-4'>
-        <p className='text-sm font-semibold'>{t.ask}</p>
+    <button className='fixed inset-0 z-30 bg-black/25' onClick={onClose} aria-label={t.close} />
+    <aside className='fixed inset-y-0 right-0 z-40 flex w-[460px] flex-col overflow-y-auto border-l border-[#dedbd4] bg-white'>
+      <div className='flex items-center justify-between border-b border-[#ece9e3] px-6 py-4'>
+        <p className='text-sm font-semibold'>{stage.title}</p>
         <button onClick={onClose} aria-label={t.close} className='rounded p-1 hover:bg-[#f3f1ed]'>
           <X className='size-4' />
         </button>
       </div>
-      <p className='px-5 py-4 text-xs leading-5 text-[#817d76]'>{t.askNote}</p>
+      <div className='px-6 py-5'>
+        <p className='text-sm leading-6'>{stage.summary}</p>
+        {rows.map(([label, value]) => (
+          <div key={label} className='mt-5'>
+            <p className='text-xs font-medium text-[#817d76]'>{label}</p>
+            <p className='mt-1 text-sm leading-6 text-[#4d4a45]'>{value}</p>
+          </div>
+        ))}
+      </div>
     </aside>
   </>
+}
+
+function Approval({ tasks, t }: { tasks: HumanTask[]; t: ReturnType<typeof dict> }) {
+  return <section className='mt-6 rounded-xl border-2 border-[#ff4801] bg-[#fff1e9] p-6'>
+    <p className='flex items-center gap-2 text-xs font-bold text-[#a94712]'>
+      <AlertTriangle className='size-4' />{t.humanNeeded}
+    </p>
+    {tasks.map(task => (
+      <div key={task.task} className='mt-3'>
+        <p className='text-lg font-semibold'>{task.title}</p>
+        <p className='mt-1 text-sm leading-6 text-[#6f6b64]'>{task.detail}</p>
+      </div>
+    ))}
+  </section>
+}
+
+/** One field, dictated or typed, and the constraints beside it. */
+function Home({ t, lang, onLang, onStarted }: {
+  t: ReturnType<typeof dict>; lang: Lang; onLang: (l: Lang) => void; onStarted: () => void
+}) {
+  const [text, setText] = useState('')
+  const [capital, setCapital] = useState(0)
+  const [days, setDays] = useState(7)
+  const [busy, setBusy] = useState(false)
+  const [note, setNote] = useState('')
+  const [listening, setListening] = useState(false)
+  const recognition = useRef<any>(null)
+
+  const speechSupported = typeof window !== 'undefined'
+    && ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window)
+
+  const toggleVoice = () => {
+    if (listening) { recognition.current?.stop(); return }
+    const Engine = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+    if (!Engine) { setNote(t.voiceUnsupported); return }
+    const engine = new Engine()
+    engine.lang = lang === 'en' ? 'en-US' : lang === 'zh' ? 'zh-CN' : 'ja-JP'
+    engine.interimResults = false
+    engine.onresult = (event: any) => {
+      const said = Array.from(event.results).map((r: any) => r[0].transcript).join('')
+      setText(value => (value ? `${value} ${said}` : said))
+    }
+    engine.onerror = () => { setListening(false); setNote(t.voiceFailed) }
+    engine.onend = () => setListening(false)
+    recognition.current = engine
+    engine.start()
+    setListening(true)
+    setNote('')
+  }
+
+  const ignite = async () => {
+    if (!text.trim()) return
+    setBusy(true); setNote('')
+    try {
+      const response = await fetch('/v1/spark', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          statement: text.trim(), capital_yen: capital, deadline_days: days,
+        }),
+      })
+      if (!response.ok) throw new Error()
+      onStarted()
+    } catch { setNote(t.startFailed); setBusy(false) }
+  }
+
+  return <div className='flex h-svh w-full flex-col bg-[#f7f7f5] text-[#20201e]'>
+    <header className='flex h-12 shrink-0 items-center gap-3 border-b border-[#dedbd4] bg-white px-5'>
+      <span className='text-sm font-semibold tracking-tight'>Guildless</span>
+      <div className='ml-auto'><LangPicker lang={lang} onLang={onLang} /></div>
+    </header>
+
+    <div className='grid flex-1 place-items-center p-8'>
+      <div className='w-full max-w-xl'>
+        <h1 className='text-2xl font-semibold'>{t.whatDoYouWant}</h1>
+
+        <div className='relative mt-5'>
+          <textarea
+            autoFocus value={text} onChange={event => setText(event.target.value)}
+            placeholder={t.sparkPlaceholder}
+            className='h-32 w-full resize-none rounded-xl border border-[#dedbd4] bg-white p-5 pr-14 text-lg leading-8 outline-none focus:border-[#ff6b32] placeholder:text-[#c4c0b8]'
+          />
+          {speechSupported && (
+            <button
+              onClick={toggleVoice} aria-label={t.voice}
+              className={`absolute right-3 top-3 grid size-9 place-items-center rounded-lg border transition-colors ${
+                listening ? 'border-[#c66a3b] bg-[#fff1e9] text-[#a94712]' : 'border-[#dedbd4] text-[#6f6b64] hover:bg-[#f3f1ed]'
+              }`}
+            >{listening ? <CircleStop className='size-4' /> : <Mic className='size-4' />}</button>
+          )}
+        </div>
+        <p className='mt-2 text-xs text-[#99958d]'>
+          {listening ? t.listening : t.sparkHelp}
+        </p>
+
+        <div className='mt-5 flex gap-4'>
+          <Field label={t.startingCapital}>
+            <input
+              type='number' min={0} step={1000} value={capital}
+              onChange={event => setCapital(Number(event.target.value) || 0)}
+              className='w-28 rounded-lg border border-[#dedbd4] bg-white px-3 py-2 text-sm tabular-nums outline-none focus:border-[#ff6b32]'
+            />
+          </Field>
+          <Field label={t.deadline}>
+            <input
+              type='number' min={1} max={365} value={days}
+              onChange={event => setDays(Number(event.target.value) || 7)}
+              className='w-20 rounded-lg border border-[#dedbd4] bg-white px-3 py-2 text-sm tabular-nums outline-none focus:border-[#ff6b32]'
+            />
+          </Field>
+          <Field label={t.constraints}>
+            <p className='py-2 text-xs leading-5 text-[#817d76]'>{t.constraintsFixed}</p>
+          </Field>
+        </div>
+
+        {note && <p className='mt-3 text-xs text-red-700'>{note}</p>}
+
+        <button
+          onClick={ignite} disabled={!text.trim() || busy}
+          className='mt-6 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#ff4801] text-base font-semibold text-white hover:bg-[#e04400] disabled:bg-[#dedbd4]'
+        >
+          {busy ? <LoaderCircle className='size-4 animate-spin' /> : <Flame className='size-4' />}
+          {t.run}
+        </button>
+      </div>
+    </div>
+  </div>
+}
+
+function DevPanel({ t, onClose }: { t: ReturnType<typeof dict>; onClose: () => void }) {
+  const [rows, setRows] = useState<{ at: string; step: string; detail: string }[]>([])
+  useEffect(() => {
+    const load = () => fetch('/v1/engine').then(r => r.json())
+      .then(d => setRows(d.activity || [])).catch(() => undefined)
+    void load()
+    const timer = window.setInterval(load, 5000)
+    return () => window.clearInterval(timer)
+  }, [])
+
+  return <>
+    <button className='fixed inset-0 z-30 bg-black/25' onClick={onClose} aria-label={t.close} />
+    <aside className='fixed inset-y-0 right-0 z-40 flex w-[520px] flex-col border-l border-[#dedbd4] bg-white'>
+      <div className='flex items-center justify-between border-b border-[#ece9e3] px-5 py-4'>
+        <p className='text-sm font-semibold'>{t.devDetails}</p>
+        <button onClick={onClose} aria-label={t.close} className='rounded p-1 hover:bg-[#f3f1ed]'>
+          <X className='size-4' />
+        </button>
+      </div>
+      <ol className='min-h-0 flex-1 overflow-y-auto px-5 py-3 font-mono text-[11px] leading-5'>
+        {rows.map((row, index) => (
+          <li key={index} className='flex gap-2 text-[#6f6b64]'>
+            <span className='shrink-0 text-[#c4c0b8]'>{row.at.slice(11, 19)}</span>
+            <span className='shrink-0 text-[#99958d]'>{row.step}</span>
+            <span className='min-w-0'>{row.detail}</span>
+          </li>
+        ))}
+      </ol>
+    </aside>
+  </>
+}
+
+function LangPicker({ lang, onLang }: { lang: Lang; onLang: (l: Lang) => void }) {
+  return <div className='flex items-center rounded-lg border border-[#dedbd4] p-0.5'>
+    <Languages className='mx-1.5 size-3.5 text-[#99958d]' />
+    {LANGS.map(item => (
+      <button key={item.id} onClick={() => onLang(item.id)}
+        className={`rounded-md px-2 py-1 text-[11px] ${
+          lang === item.id ? 'bg-[#171513] text-white' : 'text-[#6f6b64] hover:bg-[#f3f1ed]'
+        }`}>{item.label}</button>
+    ))}
+  </div>
+}
+
+function Metric({ label, value, alert = false }: { label: string; value: string; alert?: boolean }) {
+  return <div>
+    <p className='text-xs font-medium text-[#817d76]'>{label}</p>
+    <p className={`mt-0.5 text-lg font-semibold tabular-nums ${alert ? 'text-[#a94712]' : ''}`}>{value}</p>
+  </div>
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return <div>
+    <p className='mb-1 text-xs font-medium text-[#817d76]'>{label}</p>
+    {children}
+  </div>
+}
+
+function Centre({ children }: { children: React.ReactNode }) {
+  return <div className='grid h-svh place-items-center bg-[#f7f7f5]'>{children}</div>
 }

@@ -33,6 +33,13 @@ EngineState = Literal["stopped", "starting", "running", "paused", "crashed", "fi
 #: not mistaken for a death.
 STALE_AFTER = timedelta(seconds=90)
 
+#: The worker's own bookkeeping. Useful for debugging, meaningless to the person
+#: who asked for revenue, and repeated on every tick — so it is kept out of the
+#: activity a human reads.
+ROUTINE_STEPS: frozenset[str] = frozenset({
+    "observe", "diagnose", "classify", "readiness", "heartbeat",
+})
+
 
 @dataclass
 class Activity:
@@ -151,7 +158,27 @@ class Engine:
         self._save()
 
     def recent(self, limit: int = 20) -> list[dict[str, Any]]:
+        """Everything, including the internal ticks. For developer detail only."""
         return [item.as_dict() for item in list(self.activity)[-limit:]][::-1]
+
+    def notable(self, limit: int = 20) -> list[dict[str, Any]]:
+        """Only what changed.
+
+        A person watching this wants events, not a pulse. Repeating the same
+        observation every twenty seconds is the heartbeat wearing an activity
+        log's clothes, so an entry identical to the last one for its step is
+        dropped, and the routine internal steps never appear at all.
+        """
+        shown: list[Activity] = []
+        last_by_step: dict[str, str] = {}
+        for item in self.activity:
+            if item.step in ROUTINE_STEPS and not item.external:
+                continue
+            if last_by_step.get(item.step) == item.detail:
+                continue
+            last_by_step[item.step] = item.detail
+            shown.append(item)
+        return [item.as_dict() for item in shown[-limit:]][::-1]
 
     def status(self) -> dict[str, Any]:
         """What the screen may say about execution. Never inferred from files."""

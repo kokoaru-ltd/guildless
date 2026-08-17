@@ -22,6 +22,7 @@ from council.capital import CapitalAllocator
 from council.decision_ledger import DecisionLedger, Outcome
 from council import grant as grant_module
 from council import ignition
+from council import journey
 from council.engine import Engine
 from council.engine_steps import build_steps
 from council import run_status
@@ -1051,7 +1052,7 @@ def create_app(
 
     @app.get("/v1/engine")
     async def engine_status() -> dict[str, Any]:
-        return {**app.state.engine.status(), "activity": app.state.engine.recent(30)}
+        return {**app.state.engine.status(), "activity": app.state.engine.recent(50)}
 
     @app.get("/v1/outcome")
     async def outcome() -> dict[str, Any]:
@@ -1112,7 +1113,12 @@ def create_app(
                 engine["current_step"] or decision.current_action
                 if engine["alive"] else "実行していません"
             ),
-            "engine": {**engine, "activity": app.state.engine.recent(20)},
+            "engine": {**engine, "activity": app.state.engine.notable(20)},
+            "journey": journey.build({
+                **{k: v["value"] for k, v in facts.items()},
+                "spark": _current_spark(manager.output_root),
+                "external_action_grant": "付与済み" if grant else "未付与",
+            }).as_dict(),
             "external_action": {
                 "granted": grant is not None,
                 "note": "送信が必要になった時点でのみ許可を求めます",

@@ -130,3 +130,33 @@ def test_external_actions_are_marked_as_such(engine):
     marks = {item["step"]: item["external"] for item in engine.recent()}
     assert marks["outreach"] is True
     assert marks["research"] is False
+
+
+# --- a pulse is not activity ------------------------------------------------
+
+def test_routine_internal_steps_never_reach_the_reader(engine):
+    for _ in range(3):
+        for step in ("observe", "diagnose", "classify", "readiness"):
+            engine.record(step, f"{step} を実行")
+    assert engine.notable() == []
+    # They remain available for debugging.
+    assert len(engine.recent(50)) == 12
+
+
+def test_a_repeated_observation_is_shown_once(engine):
+    for _ in range(5):
+        engine.record("discovery", "22社を検査し、適格0社")
+    assert len(engine.notable()) == 1
+
+
+def test_a_changed_result_is_a_new_event(engine):
+    engine.record("discovery", "22社を検査し、適格0社")
+    engine.record("discovery", "42社を検査し、適格5社")
+    details = [item["detail"] for item in engine.notable()]
+    assert len(details) == 2
+    assert details[0].startswith("42社")
+
+
+def test_external_actions_are_always_shown(engine):
+    engine.record("observe", "内部確認", external=True)
+    assert len(engine.notable()) == 1
