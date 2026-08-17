@@ -36,6 +36,10 @@ PROTECTED_MODULES: frozenset[str] = frozenset({
     "council/capital.py",
     "council/gates.py",
     "council/self_modification.py",
+    # The definition of success. An agent able to edit this would eventually
+    # widen it, and a system that can redefine winning always wins.
+    "council/ignition.py",
+    "council/sender_identity.py",
 })
 
 
