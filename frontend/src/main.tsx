@@ -1,12 +1,12 @@
 import { StrictMode } from 'react'
 import ReactDOM from 'react-dom/client'
-import { OutcomeView } from './outcome-view'
+import { App } from './app'
 import './styles/index.css'
 
 const rootElement = document.getElementById('root')!
 
 ReactDOM.createRoot(rootElement).render(
   <StrictMode>
-    <OutcomeView />
+    <App />
   </StrictMode>
 )

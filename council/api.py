@@ -22,6 +22,7 @@ from council.capital import CapitalAllocator
 from council.decision_ledger import DecisionLedger, Outcome
 from council import grant as grant_module
 from council import ask
+from council import bets
 from council import decision_boundary
 from council import environment
 from council import ignition
@@ -1158,6 +1159,77 @@ def create_app(
                 "note": "テストモード決済は売上にもGATEにも算入していません",
             },
         }
+
+    @app.get("/v1/company")
+    async def company() -> dict[str, Any]:
+        """Everything the control tower shows, in one consistent read.
+
+        One endpoint for the same reason ``/v1/outcome`` is one: a screen
+        assembled from several calls can show this minute's cash beside last
+        minute's pipeline, and the reader cannot tell which half is stale.
+
+        Every figure here is measured or zero. Nothing is estimated, and the
+        layout is built to look correct at zero, because that is what a company
+        that has not sold anything yet honestly looks like.
+        """
+        snapshot = await outcome()
+        report = state_audit.audit(GUILDLESS_ROOT)
+        portfolio = bets.Portfolio(bets=_current_bets(report, snapshot))
+
+        target = int(report.get("target_yen") or 0)
+        cash = int(snapshot["verified_net_outcome_yen"])
+        return {
+            "company": report.get("company_name") or "",
+            "operating": bool(snapshot.get("engine", {}).get("alive")),
+            "money": {
+                # Cash is net: received minus spent. A company that took
+                # ¥300,000 and spent ¥400,000 has not made ¥300,000.
+                "cash_yen": cash,
+                "received_yen": int(snapshot["money"]["verified_revenue_yen"]),
+                "payments": portfolio.funnel["paid"],
+                # Quoted and unanswered. Labelled as expectation, never summed
+                # into cash, because the difference between the two is the
+                # difference between a business and a forecast.
+                "expected_yen": portfolio.pipeline_yen,
+                "opportunities": portfolio.funnel["quoted"],
+                "capital_yen": int(snapshot["money"]["available_yen"]),
+            },
+            "outcome": {
+                "statement": snapshot.get("spark") or "",
+                "target_yen": target,
+                "progress": round(100 * cash / target) if target > 0 else 0,
+            },
+            "decision": portfolio.decision(),
+            "bets": portfolio.as_dict(),
+            "needs_you": snapshot.get("human_required") or [],
+            "activity": snapshot.get("engine", {}).get("activity") or [],
+        }
+
+    def _current_bets(report: dict[str, Any], snapshot: dict[str, Any]) -> list[bets.Bet]:
+        """The company's bets, from what has been recorded.
+
+        There is exactly one today -- the offer the run settled on -- and it is
+        built from counted facts rather than stored, so it cannot claim a status
+        the ledger disagrees with. It returns nothing at all before an offer
+        exists, because a portfolio of one imaginary bet is worse than an empty
+        screen that says so.
+        """
+        offer = (snapshot.get("strategy") or {}).get("offer")
+        if not offer:
+            return []
+        return [bets.Bet(
+            id="primary",
+            name=str(offer),
+            offer=str(offer),
+            price_yen=int((snapshot.get("strategy") or {}).get("price_yen") or 0),
+            channel=str(report.get("channel") or ""),
+            contacted=int(report.get("contacts_made") or 0),
+            replied=int(report.get("replies_received") or 0),
+            meetings=int(report.get("meetings_booked") or 0),
+            quoted=int(report.get("quotes_sent") or 0),
+            cash_yen=int(snapshot["money"]["verified_revenue_yen"]),
+            spent_yen=int(snapshot["money"]["spent_yen"]),
+        )]
 
     @app.get("/v1/environment")
     async def company_environment() -> dict[str, Any]:

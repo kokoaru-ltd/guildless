@@ -246,11 +246,17 @@ async def test_ui_and_job_history_include_cli_completed_job(tmp_path: Path) -> N
         script_path = re.search(r'src="([^"]+\.js)"', page.text).group(1)
         script = await client.get(script_path)
         assert script.status_code == 200
-        # The bundle must carry the outcome screen's own wording. Asserting on
+        # The bundle must carry the control tower's own wording. Asserting on
         # the served bundle rather than the source is what catches a UI that
-        # builds but is never actually shipped.
-        assert "実際に増えた金" in script.text
-        assert "いま止まっている理由" in script.text
+        # builds but is never actually shipped -- which has happened here: an
+        # installed build once served a bundle whose source no longer existed.
+        #
+        # Pinned to the sidebar destinations rather than a phrase inside one
+        # screen. Copy inside a screen is meant to change; the set of places
+        # the product has is the thing that should not change quietly.
+        for destination in ("Overview", "Business", "Revenue", "Assets", "Activity"):
+            assert destination in script.text
+        assert "GUILDLESS" in script.text
         history = (await client.get("/v1/guildless/jobs")).json()
         assert history["jobs"][0]["objective"] == "TypeScriptの試作品を作る"
         detail = (await client.get(f"/v1/guildless/jobs/{job_dir.name}")).json()
