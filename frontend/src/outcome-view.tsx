@@ -305,13 +305,13 @@ function Home({ t, lang, onLang, onStarted }: {
     } catch { setNote(t.startFailed); setBusy(false) }
   }
 
-  return <div className='flex h-svh w-full flex-col bg-[#f7f7f5] text-[#20201e]'>
+  return <div className='flex h-svh w-full flex-col overflow-hidden bg-[#f7f7f5] text-[#20201e]'>
     <header className='flex h-12 shrink-0 items-center gap-3 border-b border-[#dedbd4] bg-white px-5'>
       <span className='text-sm font-semibold tracking-tight'>Guildless</span>
       <div className='ml-auto'><LangPicker lang={lang} onLang={onLang} /></div>
     </header>
 
-    <div className='grid flex-1 place-items-center p-8'>
+    <div className='grid min-h-0 flex-1 place-items-center overflow-y-auto p-8'>
       <div className='w-full max-w-xl'>
         <h1 className='text-2xl font-semibold'>{t.whatDoYouWant}</h1>
 
@@ -365,6 +365,77 @@ function Home({ t, lang, onLang, onStarted }: {
         </button>
       </div>
     </div>
+
+    <Booting t={t} />
+  </div>
+}
+
+/**
+ * The company starting up, underneath the only question there is.
+ *
+ * Not an onboarding step. Nothing here can be clicked, connected or
+ * configured, because the moment a first screen asks which services to hook up
+ * it has handed the work back to the person — they are assembling an
+ * environment for an assistant rather than handing a target to a company.
+ *
+ * A role nobody fills is stated as missing, not requested. That distinction is
+ * the whole design: it is a gap in what Guildless knows, and closing it is
+ * Guildless's problem.
+ */
+function Booting({ t }: { t: ReturnType<typeof dict> }) {
+  const [env, setEnv] = useState<{
+    understanding: number
+    roles: Record<string, string[]>
+    missing_roles: string[]
+    services: { host: string }[]
+  } | null>(null)
+
+  useEffect(() => {
+    void fetch('/v1/environment')
+      .then(response => response.json())
+      .then(setEnv)
+      .catch(() => undefined)
+  }, [])
+
+  // A strip at the foot of the screen, fixed in height. It reports the company
+  // and must never be the reason the page grows: the boot state is context for
+  // the question above it, not a document to read.
+  const shell = 'flex h-14 shrink-0 items-center gap-4 overflow-hidden border-t border-[#e8e5df] bg-white px-8'
+
+  if (!env) {
+    return <div className={shell}>
+      <p className='flex items-center gap-2 text-xs text-[#99958d]'>
+        <LoaderCircle className='size-3 animate-spin' />{t.booting}
+      </p>
+    </div>
+  }
+
+  return <div className={shell}>
+    <div className='flex shrink-0 items-baseline gap-2'>
+      <p className='text-xs font-medium text-[#817d76]'>{t.understanding}</p>
+      <p className='text-sm font-semibold tabular-nums'>{env.understanding}%</p>
+    </div>
+
+    {/* One line, scrolled sideways rather than wrapped. Wrapping is what put
+        the page over the fold, and a second row of hostnames tells the reader
+        no more than the first. */}
+    <div className='flex min-w-0 flex-1 items-center gap-4 overflow-x-auto'>
+      {Object.entries(env.roles).map(([role, hosts]) => (
+        <p key={role} className='shrink-0 whitespace-nowrap text-[11px] text-[#6f6b64]'>
+          <span className='text-[#aaa69e]'>{t.roles[role] ?? role}</span>{' '}
+          {hosts[0]}
+        </p>
+      ))}
+      {env.missing_roles.map(role => (
+        <p key={role} className='shrink-0 whitespace-nowrap text-[11px] text-[#c4c0b8]'>
+          {t.roles[role] ?? role} {t.notFound}
+        </p>
+      ))}
+    </div>
+
+    <p className='shrink-0 text-[11px] text-[#aaa69e]'>
+      {t.servicesFound.replace('{n}', String(env.services.length))}
+    </p>
   </div>
 }
 

@@ -22,6 +22,8 @@ from council.capital import CapitalAllocator
 from council.decision_ledger import DecisionLedger, Outcome
 from council import grant as grant_module
 from council import ask
+from council import decision_boundary
+from council import environment
 from council import ignition
 from council import journey
 from council.engine import Engine
@@ -1076,10 +1078,10 @@ def create_app(
         breakdown = report.get("capital_breakdown_yen") or {}
         grant = grant_module.load(manager.output_root)
 
-        # Permission is asked for at the side-effect boundary, never earlier.
-        # A grant that is merely absent is not a blockage while there is still
-        # nobody to contact -- treating it as one is how this stops working and
-        # starts waiting.
+        # A person is stopped at decisions, not at doors. Reaching out,
+        # publishing, and spending inside the committed capital all proceed;
+        # only an irreversible commitment the owner has not already authorised
+        # reaches them, and then with the figure named.
         decision = run_status.decide(run_status.RunFacts(
             real_payments=real_payments,
             prospects_inspected=int(report.get("prospects_inspected") or 0),
@@ -1087,8 +1089,11 @@ def create_app(
             delivery_proof_passed=bool(report.get("delivery_proof_passed")),
             message_ready=False,
             safety_passed=False,
-            grant_present=grant is not None,
             identity_present=report.get("sender_identity") == "設定済み",
+            budget=decision_boundary.Budget(
+                remaining_yen=int(breakdown.get("experiment", 0)),
+                recipients_used=int(report.get("contacts_made") or 0),
+            ),
         ))
         human_tasks = list(decision.human_required)
         if processor and decision.status == "HUMAN_REQUIRED":
@@ -1153,6 +1158,24 @@ def create_app(
                 "note": "テストモード決済は売上にもGATEにも算入していません",
             },
         }
+
+    @app.get("/v1/environment")
+    async def company_environment() -> dict[str, Any]:
+        """What this company already has, read from the machine.
+
+        Exists so the first screen can boot rather than onboard. Nothing here
+        is a question: the browsers, the profiles and the services are found,
+        and a role nobody fills is reported as missing rather than requested.
+
+        Runs on demand -- it costs under a fifth of a second and a cached
+        picture of a company is a wrong one the moment the owner signs into
+        something new.
+        """
+        try:
+            return environment.discover().as_dict()
+        except Exception as error:  # noqa: BLE001 - discovery must never block the screen
+            _ASK_LOG.warning("environment discovery failed: %s", error)
+            return environment.Environment().as_dict()
 
     @app.post("/v1/ask")
     async def ask_about_the_run(request: AskRequest) -> dict[str, Any]:

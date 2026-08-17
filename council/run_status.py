@@ -1,16 +1,25 @@
 """Decides when a person is genuinely needed, and refuses to stop before then.
 
-The mistake this fixes: the run reported HUMAN_REQUIRED because no outreach
-grant existed, while the actual blockage was that it had found nobody to
-contact. Waiting for permission it did not yet need turns the whole thing back
-into an ordinary assistant — one that halts and asks, instead of working until
-it hits something only a person can do.
+This has now moved the boundary twice, and the direction both times was the
+same: away from asking.
 
-Permission is needed at the side-effect boundary and nowhere earlier. Searching,
-qualifying, researching, drafting, proving delivery and comparing strategies all
-proceed without it, because none of them touch anyone. The grant is requested at
-the moment there is a real prospect, a finished message, a passed safety check,
-and the only remaining step is the irreversible one.
+The first version stopped because no outreach permission existed, while the
+real blockage was that it had found nobody to contact -- waiting for a
+permission it did not yet need. The second stopped at the side-effect boundary:
+permission was requested the moment the next step reached a person. That is
+better, and still wrong. It gates on *access*, so one researched email to one
+prospect was treated exactly like a blast to ten thousand, and the run still
+ended every attempt by handing the work back.
+
+The boundary is the decision, not the door. Outreach, publishing a page,
+creating a checkout, spending inside the capital the owner already committed --
+all of it proceeds. A person is stopped only when a specific action is
+irreversible and the consequence is not bounded by something they already
+agreed to, which :mod:`council.decision_boundary` decides per action.
+
+So this module no longer knows about grants at all. It reports what the run is
+doing and whether it has finished; the one thing that can put it in
+HUMAN_REQUIRED is a real ruling on a real pending action.
 """
 
 from __future__ import annotations
@@ -18,23 +27,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Literal
 
+from council.decision_boundary import Action, Budget, rule
 
 Status = Literal["RUNNING", "BLOCKED", "HUMAN_REQUIRED", "SUCCESS", "TERMINAL_FAILURE"]
-
-#: Work that reaches nobody. All of it continues without any permission.
-NON_SIDE_EFFECT_WORK: frozenset[str] = frozenset({
-    "customer_discovery",
-    "eligibility_check",
-    "channel_discovery",
-    "contact_discovery",
-    "case_research",
-    "offer_design",
-    "message_drafting",
-    "delivery_proof",
-    "strategy_comparison",
-    "asset_generation",
-    "free_sample_generation",
-})
 
 
 @dataclass
@@ -48,12 +43,15 @@ class RunFacts:
     #: A message exists for a specific prospect and passed the safety checks.
     message_ready: bool = False
     safety_passed: bool = False
-    grant_present: bool = False
     identity_present: bool = False
     #: Set only when the run has genuinely run out of things to try.
     strategies_exhausted: bool = False
     deadline_passed: bool = False
     capital_exhausted: bool = False
+    #: The one thing that can stop the run: an action whose consequence the
+    #: owner has not already authorised. None while nothing is pending.
+    pending_action: Action | None = None
+    budget: Budget = field(default_factory=Budget)
 
 
 @dataclass
@@ -68,21 +66,6 @@ class StatusDecision:
         return self.status == "HUMAN_REQUIRED"
 
 
-def at_side_effect_boundary(facts: RunFacts) -> bool:
-    """True only when the next step is the irreversible one.
-
-    Every condition must hold. A missing grant with nobody to contact is not
-    a blockage, it is a permission that has not become relevant yet.
-    """
-    return (
-        facts.prospects_eligible > 0
-        and facts.message_ready
-        and facts.safety_passed
-        and facts.delivery_proof_passed
-        and not facts.grant_present
-    )
-
-
 def decide(facts: RunFacts) -> StatusDecision:
     if facts.real_payments > 0:
         return StatusDecision("SUCCESS", "収支を確認しています", reason="実入金を確認しました")
@@ -94,26 +77,22 @@ def decide(facts: RunFacts) -> StatusDecision:
             reason="期限・資金・戦略のいずれかが尽きました",
         )
 
-    if at_side_effect_boundary(facts):
-        return StatusDecision(
-            "HUMAN_REQUIRED",
-            "送信の直前で止まっています。許可があれば続行します。",
-            human_required=[{
-                "task": "grant_external_contact",
-                "title": "外部への接触を許可してください",
-                "detail": (
-                    f"適格な見込み客{facts.prospects_eligible}社と送信内容が用意でき、"
-                    "安全確認も通っています。残るのは送信だけで、これは取り消せません。"
-                ),
-            }],
-            reason="不可逆な外部作用の直前",
-        )
-
-    if not facts.grant_present and facts.prospects_eligible > 0 and not facts.message_ready:
-        return StatusDecision(
-            "RUNNING", "見込み客ごとの提案文を作成しています",
-            reason="許可はまだ不要です",
-        )
+    # The only reason to stop. Note what is *not* here: having found prospects,
+    # having a message ready, lacking a permission. Those are work, and work
+    # proceeds.
+    if facts.pending_action is not None:
+        ruling = rule(facts.pending_action, facts.budget)
+        if ruling.needs_human:
+            return StatusDecision(
+                "HUMAN_REQUIRED",
+                "承認待ちです。それ以外の作業は続けています。",
+                human_required=[{
+                    "task": facts.pending_action.kind,
+                    "title": ruling.prompt,
+                    "detail": ruling.reason,
+                }],
+                reason=ruling.reason,
+            )
 
     if facts.prospects_eligible == 0:
         # The real blockage, and it is Guildless's own problem to solve.
@@ -128,9 +107,7 @@ def decide(facts: RunFacts) -> StatusDecision:
     if not facts.delivery_proof_passed:
         return StatusDecision("RUNNING", "売る前に、作れることを確かめています")
 
-    return StatusDecision("RUNNING", "実行を進めています")
+    if not facts.message_ready:
+        return StatusDecision("RUNNING", "見込み客ごとの提案文を作成しています")
 
-
-def may_proceed_without_grant(work: str) -> bool:
-    """Whether this task runs while no external permission exists."""
-    return work in NON_SIDE_EFFECT_WORK
+    return StatusDecision("RUNNING", "見込み客へ接触しています")
