@@ -5,7 +5,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from council.engine import STALE_AFTER, Engine, Heartbeat
+from council.engine import ROUTINE_STEPS, STALE_AFTER, Engine, Heartbeat
 
 
 @pytest.fixture
@@ -141,6 +141,33 @@ def test_routine_internal_steps_never_reach_the_reader(engine):
     assert engine.notable() == []
     # They remain available for debugging.
     assert len(engine.recent(50)) == 12
+
+
+def test_a_routine_step_is_never_reported_as_the_current_action(engine):
+    """The leak: asked what it was doing, the screen answered "readiness"."""
+    engine.steps = [(step, lambda: "") for step in sorted(ROUTINE_STEPS)]
+    engine.start()
+
+    # Sample across several ticks: the loop cycles through every routine step,
+    # so a single read could miss the one that leaks.
+    deadline = time.time() + 3
+    seen = set()
+    while time.time() < deadline:
+        seen.add(engine.status()["current_step"])
+        time.sleep(0.02)
+
+    assert seen == {""}, f"internal step names reached the reader: {seen - {''}}"
+
+
+def test_a_real_step_is_still_reported(engine):
+    engine.steps = [("見込み客の調査", lambda: "")]
+    engine.start()
+
+    deadline = time.time() + 3
+    while time.time() < deadline and engine.status()["current_step"] == "":
+        time.sleep(0.02)
+
+    assert engine.status()["current_step"] == "見込み客の調査"
 
 
 def test_a_repeated_observation_is_shown_once(engine):

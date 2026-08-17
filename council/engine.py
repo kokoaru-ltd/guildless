@@ -187,7 +187,17 @@ class Engine:
             "state": self.heartbeat.state if alive else _settled(self.heartbeat.state),
             "alive": alive,
             "last_beat": self.heartbeat.at,
-            "current_step": self.heartbeat.step if alive else "",
+            # Routine steps are filtered here for the same reason ``notable``
+            # drops them: "observe" and "readiness" are the worker's own
+            # bookkeeping, and reporting one as what the company is doing puts
+            # an internal identifier in front of a reader who asked about their
+            # business. Empty is honest -- the caller falls back to the
+            # decision's own description of the work.
+            "current_step": (
+                self.heartbeat.step
+                if alive and self.heartbeat.step not in ROUTINE_STEPS
+                else ""
+            ),
             "ticks": self.heartbeat.tick,
             "error": self.heartbeat.error,
         }

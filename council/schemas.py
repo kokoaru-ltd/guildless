@@ -474,6 +474,27 @@ class RevenueScoutRequest(StrictModel):
     plan_id: str = Field(pattern=r"^[A-Za-z0-9_-]{1,80}$")
 
 
+class AskAnswer(StrictModel):
+    """What a model is allowed to return when asked about the run.
+
+    One field. A shape with room for actions, next steps, or recommendations is
+    an invitation to produce them, and this channel does not act.
+    """
+
+    answer: str = Field(max_length=600)
+
+
+class AskRequest(StrictModel):
+    """A question about a run in flight. Read-only by construction.
+
+    Carries no run id and no target field on purpose: there is one run, and
+    nothing here may name a thing to change. A request body that could address
+    part of the run would be the beginning of a control channel.
+    """
+
+    question: str = Field(min_length=1, max_length=500)
+
+
 class SparkRequest(StrictModel):
     """The only required input: a thought, and optionally what is already owned."""
 

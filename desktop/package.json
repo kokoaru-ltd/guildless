@@ -1,7 +1,7 @@
 {
   "name": "guildless",
   "productName": "Guildless",
-  "version": "0.1.2",
+  "version": "0.1.5",
   "description": "Turns a spark and some capital into verified revenue",
   "main": "main.js",
   "private": true,

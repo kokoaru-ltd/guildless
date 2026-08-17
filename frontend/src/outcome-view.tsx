@@ -46,6 +46,7 @@ export function OutcomeView() {
   const [lang, setLang] = useState<Lang>(() => loadLang())
   const [openStage, setOpenStage] = useState<string | null>(null)
   const [devOpen, setDevOpen] = useState(false)
+  const [askOpen, setAskOpen] = useState(false)
   const t = dict(lang)
 
   const load = useCallback(async () => {
@@ -77,6 +78,10 @@ export function OutcomeView() {
     <header className='flex h-12 shrink-0 items-center gap-3 border-b border-[#dedbd4] bg-white px-5'>
       <span className='text-sm font-semibold tracking-tight'>Guildless</span>
       <div className='ml-auto flex items-center gap-2'>
+        <button
+          onClick={() => setAskOpen(true)}
+          className='rounded-lg border border-[#dedbd4] px-2.5 py-1 text-xs font-medium text-[#4d4a45] hover:bg-[#f3f1ed]'
+        >{t.ask}</button>
         <LangPicker lang={lang} onLang={changeLang} />
         <button
           onClick={() => setDevOpen(true)}
@@ -86,17 +91,17 @@ export function OutcomeView() {
       </div>
     </header>
 
-    <main className='min-h-0 flex-1 overflow-y-auto'>
-      <div className='mx-auto max-w-[1000px] px-8 py-8'>
-
-        {/* 1. What I asked for, and what it has produced. */}
+    {/* Fixed height, two columns. A control centre that has to be scrolled
+        hides the thing it exists to show, so nothing here grows the page. */}
+    <main className='grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_380px] gap-6 overflow-hidden px-8 py-6'>
+      <div className='flex min-h-0 flex-col'>
         <p className='text-xs font-medium text-[#817d76]'>{t.iAskedFor}</p>
-        <h1 className='mt-1 text-2xl font-semibold leading-9'>{data.spark}</h1>
+        <h1 className='mt-0.5 truncate text-xl font-semibold'>{data.spark}</h1>
 
-        <div className='mt-6 flex flex-wrap items-end gap-x-10 gap-y-4'>
+        <div className='mt-4 flex shrink-0 flex-wrap items-end gap-x-8 gap-y-3'>
           <div>
             <p className='text-xs font-medium text-[#817d76]'>{t.netOutcome}</p>
-            <p className={`mt-0.5 text-5xl font-semibold leading-none tabular-nums ${
+            <p className={`mt-0.5 text-4xl font-semibold leading-none tabular-nums ${
               data.verified_net_outcome_yen > 0 ? 'text-[#1a7f37]' : ''
             }`}>{yen(data.verified_net_outcome_yen)}</p>
           </div>
@@ -112,9 +117,8 @@ export function OutcomeView() {
 
         {needsHuman && <Approval tasks={data.human_required} t={t} />}
 
-        {/* 2. The single path, with one position marked. */}
         {journey && (
-          <ol className='mt-8'>
+          <ol className='mt-5 min-h-0 flex-1 overflow-y-auto pr-2'>
             {journey.stages.map((stage, index) => (
               <StageRow
                 key={stage.id} stage={stage} t={t}
@@ -124,16 +128,17 @@ export function OutcomeView() {
             ))}
           </ol>
         )}
+      </div>
 
-        {/* 3. The strategy, so the reasoning is visible without a thought log. */}
+      <aside className='flex min-h-0 flex-col gap-4 overflow-y-auto'>
         {data.strategy.offer && (
-          <section className='mt-8 rounded-xl border border-[#dedbd4] bg-white p-6'>
+          <section className='shrink-0 rounded-xl border border-[#dedbd4] bg-white p-5'>
             <p className='text-xs font-medium text-[#817d76]'>{t.plan}</p>
-            <p className='mt-2 text-sm font-semibold'>{data.strategy.offer}
-              {data.strategy.price_yen ? <span className='ml-2 font-normal text-[#817d76]'>
-                {yen(data.strategy.price_yen)}</span> : null}
-            </p>
-            <p className='mt-1.5 text-xs leading-5 text-[#6f6b64]'>{data.strategy.chosen_because}</p>
+            <p className='mt-2 text-sm font-semibold leading-6'>{data.strategy.offer}</p>
+            {data.strategy.price_yen ? (
+              <p className='mt-0.5 text-xs text-[#817d76]'>{yen(data.strategy.price_yen)}</p>
+            ) : null}
+            <p className='mt-2 text-xs leading-5 text-[#6f6b64]'>{data.strategy.chosen_because}</p>
             {data.strategy.rejected.map(item => (
               <p key={item.name} className='mt-1 text-[11px] leading-4 text-[#aaa69e]'>
                 {t.rejected}：{item.name} — {item.reasons[0]}
@@ -142,23 +147,25 @@ export function OutcomeView() {
           </section>
         )}
 
-        {/* 4. Events only. A pulse is not an event. */}
-        {data.engine?.activity?.length ? (
-          <section className='mt-6'>
-            <p className='text-xs font-medium text-[#817d76]'>{t.changes}</p>
-            <ol className='mt-2 space-y-1'>
-              {data.engine.activity.map((item, index) => (
-                <li key={index} className='flex gap-3 text-xs leading-6'>
+        <section className='min-h-0 rounded-xl border border-[#dedbd4] bg-white p-5'>
+          <p className='text-xs font-medium text-[#817d76]'>{t.changes}</p>
+          {data.engine?.activity?.length ? (
+            <ol className='mt-2 space-y-1.5'>
+              {data.engine.activity.slice(0, 8).map((item, index) => (
+                <li key={index} className='flex gap-2 text-xs leading-5'>
                   <span className='shrink-0 tabular-nums text-[#c4c0b8]'>{item.at.slice(11, 16)}</span>
                   <span className={item.external ? 'text-[#a94712]' : 'text-[#4d4a45]'}>{item.detail}</span>
                 </li>
               ))}
             </ol>
-          </section>
-        ) : null}
-      </div>
+          ) : (
+            <p className='mt-2 text-xs leading-5 text-[#99958d]'>{t.noChangesYet}</p>
+          )}
+        </section>
+      </aside>
     </main>
 
+    {askOpen && <AskDrawer t={t} onClose={() => setAskOpen(false)} />}
     {detail && <StageDetail stage={detail} t={t} onClose={() => setOpenStage(null)} />}
     {devOpen && <DevPanel t={t} onClose={() => setDevOpen(false)} />}
   </div>
@@ -359,6 +366,93 @@ function Home({ t, lang, onLang, onStarted }: {
       </div>
     </div>
   </div>
+}
+
+/**
+ * Questions about the company, off to one side.
+ *
+ * A drawer rather than the centre of the screen, because the centre belongs to
+ * the business. Putting a conversation there would make talking to the machine
+ * look like the work, when the work is the run happening whether anyone types
+ * or not — and a company whose state you can only learn by asking is one you
+ * are operating, not one that is operating.
+ *
+ * It refuses instructions out loud. The banner says so before anyone types, so
+ * a rejected order is a rule the reader already knew rather than a surprise.
+ */
+function AskDrawer({ t, onClose }: { t: ReturnType<typeof dict>; onClose: () => void }) {
+  const [question, setQuestion] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [turns, setTurns] = useState<{ question: string; answer: string; refused: boolean }[]>([])
+  const tail = useRef<HTMLDivElement>(null)
+
+  useEffect(() => { tail.current?.scrollIntoView({ behavior: 'smooth' }) }, [turns])
+
+  const send = async () => {
+    const asked = question.trim()
+    if (!asked || busy) return
+    setBusy(true); setQuestion('')
+    try {
+      const response = await fetch('/v1/ask', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question: asked }),
+      })
+      if (!response.ok) throw new Error()
+      const body = await response.json()
+      setTurns(prior => [...prior, { question: asked, answer: body.text, refused: body.refused }])
+    } catch {
+      setTurns(prior => [...prior, { question: asked, answer: t.askFailed, refused: false }])
+    }
+    setBusy(false)
+  }
+
+  return <aside className='fixed inset-y-0 right-0 z-20 flex w-[420px] flex-col border-l border-[#dedbd4] bg-white shadow-xl'>
+    <header className='flex h-12 shrink-0 items-center gap-2 border-b border-[#dedbd4] px-5'>
+      <p className='text-sm font-semibold'>{t.askTitle}</p>
+      <button onClick={onClose} className='ml-auto text-[#99958d] hover:text-[#20201e]'>
+        <X className='size-4' />
+      </button>
+    </header>
+
+    <p className='shrink-0 border-b border-[#f0eee9] bg-[#faf9f7] px-5 py-2.5 text-[11px] leading-4 text-[#817d76]'>
+      {t.askHint}
+    </p>
+
+    <div className='min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4'>
+      {turns.length === 0 && <p className='text-xs text-[#99958d]'>{t.askEmpty}</p>}
+      {turns.map((turn, index) => (
+        <div key={index}>
+          <p className='text-xs font-medium text-[#817d76]'>{turn.question}</p>
+          <p className={`mt-1 text-sm leading-6 ${turn.refused ? 'text-[#a94712]' : ''}`}>
+            {turn.answer}
+          </p>
+          {turn.refused && (
+            <p className='mt-1 text-[11px] text-[#c66a3b]'>{t.askReadOnly}</p>
+          )}
+        </div>
+      ))}
+      <div ref={tail} />
+    </div>
+
+    <div className='shrink-0 border-t border-[#dedbd4] p-4'>
+      <textarea
+        autoFocus value={question} onChange={event => setQuestion(event.target.value)}
+        onKeyDown={event => {
+          // Enter sends; Shift+Enter breaks the line. A question is one line
+          // far more often than it is several.
+          if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void send() }
+        }}
+        placeholder={t.askPlaceholder}
+        className='h-16 w-full resize-none rounded-lg border border-[#dedbd4] p-3 text-sm leading-6 outline-none focus:border-[#ff6b32] placeholder:text-[#c4c0b8]'
+      />
+      <button
+        onClick={() => void send()} disabled={!question.trim() || busy}
+        className='mt-2 flex h-9 w-full items-center justify-center gap-2 rounded-lg bg-[#20201e] text-sm font-medium text-white hover:bg-[#3a3833] disabled:bg-[#dedbd4]'
+      >
+        {busy ? <LoaderCircle className='size-3.5 animate-spin' /> : null}{t.askSend}
+      </button>
+    </div>
+  </aside>
 }
 
 function DevPanel({ t, onClose }: { t: ReturnType<typeof dict>; onClose: () => void }) {

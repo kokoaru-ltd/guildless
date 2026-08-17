@@ -24,11 +24,15 @@ def data_home() -> Path:
     is not writable, and a ledger that fails to save is worse than one that
     never existed.
     """
+    # Resolved, because the write boundary resolves too. A path that reaches
+    # the same directory by a different route -- a junction, a redirect, a
+    # mapped drive -- fails the boundary check even though both sides mean the
+    # same folder, and the runtime then refuses to start.
     override = os.getenv("GUILDLESS_HOME")
     if override:
-        return Path(override)
+        return Path(override).resolve()
     base = os.getenv("LOCALAPPDATA") or str(Path.home())
-    return Path(base) / "Guildless"
+    return (Path(base) / "Guildless").resolve()
 
 
 def main() -> int:
@@ -39,8 +43,11 @@ def main() -> int:
 
     home = data_home()
     (home / "runs").mkdir(parents=True, exist_ok=True)
-    os.environ.setdefault("COUNCIL_OUTPUT_DIR", str(home / "runs"))
-    os.environ.setdefault("COUNCIL_RUNTIME_DIR", str(home / ".runtime"))
+    # Set rather than defaulted: an inherited value from the launching shell
+    # would point somewhere the boundary does not allow.
+    os.environ["GUILDLESS_HOME"] = str(home)
+    os.environ["COUNCIL_OUTPUT_DIR"] = str(home / "runs")
+    os.environ["COUNCIL_RUNTIME_DIR"] = str(home / ".runtime")
     os.chdir(home)
 
     # Imported after the environment is set, because settings are read at

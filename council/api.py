@@ -21,6 +21,7 @@ from council.config import Settings
 from council.capital import CapitalAllocator
 from council.decision_ledger import DecisionLedger, Outcome
 from council import grant as grant_module
+from council import ask
 from council import ignition
 from council import journey
 from council.engine import Engine
@@ -37,7 +38,7 @@ from council.payment import (
 )
 from council.success_validator import validate_deliberation
 from council.guildless import GuildlessOrchestrator
-from council.orchestrator import CouncilOrchestrator
+from council.orchestrator import CouncilOrchestrator, default_provider_factory
 from council.sales_oss import SalesOssError, SalesOssRegistry
 from council.github_scout import GitHubScout, GitHubScoutError
 from council.revenue_engine import (
@@ -52,6 +53,8 @@ from council.schemas import (
     CouncilRunAccepted,
     CouncilRunRequest,
     DecisionOutcomeRequest,
+    AskAnswer,
+    AskRequest,
     SparkRequest,
     GuildlessJobRequest,
     GuildlessRunRequest,
@@ -74,6 +77,7 @@ from council.transcription import LocalWhisperTranscriber
 
 
 _LOG = logging.getLogger("guildless.payments")
+_ASK_LOG = logging.getLogger("guildless.ask")
 
 TERMINAL_STATES = {"completed", "degraded", "partial", "awaiting_approval", "failed"}
 LEGACY_UI_ROOT = Path(__file__).resolve().parent / "ui"
@@ -1149,6 +1153,57 @@ def create_app(
                 "note": "テストモード決済は売上にもGATEにも算入していません",
             },
         }
+
+    @app.post("/v1/ask")
+    async def ask_about_the_run(request: AskRequest) -> dict[str, Any]:
+        """Answer a question about the run. Never act on it.
+
+        Reads the same snapshot ``/v1/outcome`` returns rather than recomputing,
+        so the drawer can never contradict the screen behind it -- two reads of
+        a moving system disagree, and the reader has no way to know which is
+        stale.
+        """
+        snapshot = await outcome()
+        try:
+            settled = ask.prepare(request.question, snapshot)
+        except ask.AskError as error:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, str(error)) from error
+        if settled is not None:
+            return settled.as_dict()
+
+        # Only open questions reach a model, and it sees the measured facts
+        # rather than the run's files. Built on first use rather than at start:
+        # most questions are answered arithmetically above and never need one.
+        provider = getattr(app.state, "ask_provider", None)
+        if provider is None:
+            try:
+                built = default_provider_factory(app.state.settings)
+            except Exception as error:  # noqa: BLE001 - a missing key reads the same
+                _ASK_LOG.warning("no provider available: %s", error)
+                return ask.Answer(text="いま説明できる相手がいません。").as_dict()
+            provider = built.get("gemini") or next(iter(built.values()), None)
+            app.state.ask_provider = provider
+        if provider is None:
+            return ask.Answer(text="いま説明できる相手がいません。").as_dict()
+
+        # Providers fail; an unanswered question is a normal outcome here, not
+        # an error worth breaking the screen for.
+        try:
+            result = await provider.generate_json(
+                system_prompt=ask.SYSTEM_PROMPT,
+                user_prompt=f"{ask.grounding_prompt(snapshot)}\n\n質問: {request.question}",
+                schema_model=AskAnswer,
+                schema_name="AskAnswer",
+                deterministic=True,
+            )
+            return ask.Answer(
+                text=str(result.data.get("answer") or "").strip() or "答えられません。",
+                grounded_in=("journey", "engine", "money"),
+                from_model=True,
+            ).as_dict()
+        except Exception as error:  # noqa: BLE001 - any provider failure reads the same
+            _ASK_LOG.warning("ask failed: %s", error)
+            return ask.Answer(text="いま答えを用意できませんでした。").as_dict()
 
     @app.post("/v1/spark")
     async def set_spark(request: SparkRequest) -> dict[str, Any]:

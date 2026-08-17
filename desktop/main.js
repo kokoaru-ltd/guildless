@@ -74,16 +74,34 @@ async function ensureRuntime() {
     return { started: false, ok: false, error: `実行エンジンが見つかりません: ${binary}` }
   }
 
-  fs.mkdirSync(dataHome(), { recursive: true })
+  const home = dataHome()
+  fs.mkdirSync(home, { recursive: true })
+  const logPath = path.join(home, 'runtime.log')
+  const log = fs.openSync(logPath, 'a')
+
   runtime = spawn(binary, ['--port', String(PORT)], {
-    detached: true,           // survives the shell, which is the point
-    stdio: 'ignore',
-    env: { ...process.env, GUILDLESS_HOME: dataHome() },
+    detached: true,               // survives the shell, which is the point
+    stdio: ['ignore', log, log],  // and says why when it does not start
+    cwd: home,
+    env: { ...process.env, GUILDLESS_HOME: home },
   })
   runtime.unref()
 
   const ok = await waitForRuntime()
-  return { started: true, ok, error: ok ? '' : '実行エンジンが応答しませんでした' }
+  if (ok) return { started: true, ok: true, error: '' }
+
+  let tail = ''
+  try {
+    tail = fs.readFileSync(logPath, 'utf8').trim().split('
+').slice(-8).join('
+')
+  } catch { /* nothing written */ }
+  return {
+    started: true, ok: false,
+    error: `実行エンジンが応答しませんでした。
+
+${tail || logPath}`,
+  }
 }
 
 function stopRuntime() {
