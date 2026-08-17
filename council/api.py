@@ -20,6 +20,7 @@ from council.config import Settings
 from council.capital import CapitalAllocator
 from council.decision_ledger import DecisionLedger, Outcome
 from council import grant as grant_module
+from council import run_status
 from council import state_audit
 from council.gates import current_level, locked_capabilities
 from council.payment import (
@@ -82,41 +83,6 @@ ALLOWED_AUDIO_TYPES = {
 
 
 GUILDLESS_ROOT = Path(__file__).resolve().parent.parent
-
-
-def _run_status(report: Any, human_tasks: list[dict], real_payments: int) -> str:
-    """One word for where the whole thing stands.
-
-    HUMAN_REQUIRED outranks RUNNING because a run that is waiting on a person
-    is not running, and showing it as running is how a company sits blocked
-    for a week while the screen looks healthy.
-    """
-    if real_payments > 0:
-        return "SUCCESS"
-    if human_tasks:
-        return "HUMAN_REQUIRED"
-    if report.get("prospects_eligible", 0) == 0 and report.get("prospects_inspected", 0) > 0:
-        return "BLOCKED"
-    return "RUNNING"
-
-
-def _current_action(report: Any, status: str) -> str:
-    if status == "HUMAN_REQUIRED":
-        return "あなたの操作を待っています。それまで外部へは何もしません。"
-    if status == "BLOCKED":
-        return "接触できる相手が見つからないため、別の顧客層とチャネルを探しています。"
-    stage = report.get("loop_stage")
-    labels = {
-        "offer_selection": "売る商品を選んでいます",
-        "delivery_proof": "売る前に、作れることを確かめています",
-        "customer_search": "条件に合う見込み客を探しています",
-        "outreach": "見込み客へ連絡しています",
-        "payment": "入金を待っています",
-        "delivery": "納品しています",
-        "profit": "収支を確認しています",
-        "killed": "この商品での挑戦は停止しました",
-    }
-    return labels.get(stage or "", "待機中です")
 
 
 def _rejected_offers() -> list[dict[str, Any]]:
@@ -1058,24 +1024,35 @@ def create_app(
         breakdown = report.get("capital_breakdown_yen") or {}
         grant = grant_module.load(manager.output_root)
 
-        human_tasks = list(processor.human_tasks()) if processor else []
-        if grant is None:
-            human_tasks.append({
-                "task": "external_action_grant",
-                "title": "外部への接触を許可してください",
-                "detail": (
-                    "見込み客への連絡を開始するには、範囲を決めた許可が必要です。"
-                    "Guildless自身がこの許可を作ることはできません。"
-                ),
-            })
+        # Permission is asked for at the side-effect boundary, never earlier.
+        # A grant that is merely absent is not a blockage while there is still
+        # nobody to contact -- treating it as one is how this stops working and
+        # starts waiting.
+        decision = run_status.decide(run_status.RunFacts(
+            real_payments=real_payments,
+            prospects_inspected=int(report.get("prospects_inspected") or 0),
+            prospects_eligible=int(report.get("prospects_eligible") or 0),
+            delivery_proof_passed=bool(report.get("delivery_proof_passed")),
+            message_ready=False,
+            safety_passed=False,
+            grant_present=grant is not None,
+            identity_present=report.get("sender_identity") == "設定済み",
+        ))
+        human_tasks = list(decision.human_required)
+        if processor and decision.status == "HUMAN_REQUIRED":
+            human_tasks.extend(processor.human_tasks())
 
-        status = _run_status(report, human_tasks, real_payments)
+        status = decision.status
         return {
             "verified_net_outcome_yen": revenue - spent,
             "goal": "火種 → 第三者からの実入金 ¥1以上",
             "status": status,
             "bottleneck": state_audit.bottleneck(report),
-            "current_action": _current_action(report, status),
+            "current_action": decision.current_action,
+            "external_action": {
+                "granted": grant is not None,
+                "note": "送信が必要になった時点でのみ許可を求めます",
+            },
             "money": {
                 "starting_capital_yen": int(report.get("initial_capital_yen") or 0),
                 "available_yen": int(breakdown.get("experiment", 0)) + int(breakdown.get("ai_api", 0)),

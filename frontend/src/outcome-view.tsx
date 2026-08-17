@@ -38,6 +38,7 @@ type Outcome = {
   failures: Failure[]
   human_required: HumanTask[]
   gate: { level: string; real_payments: number }
+  external_action?: { granted: boolean; note: string }
   excluded_from_totals: { test_payments: number; note: string }
 }
 
@@ -220,9 +221,15 @@ export function OutcomeView() {
         </section>
       )}
 
-      <footer className='mt-6 flex items-center gap-4 text-[11px] text-[#aaa69e]'>
+      <footer className='mt-6 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-[#aaa69e]'>
         <span>段階 {data.gate.level}</span>
         <span>確認済み入金 {data.gate.real_payments}件</span>
+        {data.external_action && (
+          <span>
+            外部作用 {data.external_action.granted ? '許可済み' : '未許可'}
+            <span className='ml-1 text-[#c4c0b8]'>· {data.external_action.note}</span>
+          </span>
+        )}
       </footer>
     </div>
 
