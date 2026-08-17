@@ -1,75 +1,80 @@
 /**
- * The visual vocabulary, in one place.
+ * The visual vocabulary, taken from Midday's components rather than its tokens.
  *
- * The palette follows Midday's discipline, which is stricter than it first
- * looks: the page is pure white, surfaces are a warm off-white, borders are a
- * warm grey, and *there is no accent colour in the data*. Their charts are
- * literally black. Colour is spent on one thing only — the fact that money
- * arrived — and spending it anywhere else would make that fact ordinary.
+ * Reading their CSS variables was not enough and produced the wrong thing. The
+ * actual specification lives in the components, and it is more severe than the
+ * palette suggests:
  *
- * The warmth sits in the surfaces, not the page. That inversion is what keeps
- * a near-monochrome screen from reading as grey and dead: white behind, paper
- * on top.
+ * * **Square.** Their data surfaces carry `border` with no radius at all.
+ *   Rounding is reserved for things that are not data — avatars, icon tiles,
+ *   10px chips. A grid of rounded cards reads as an app; a grid of square
+ *   bordered cells reads as a statement, which is what this is.
+ * * **White, not warm.** The warm card token is used for popovers. The widget
+ *   cards are `bg-white` with a `#e6e6e6` hairline.
+ * * **Small numbers.** `text-xl font-medium`, not a display-size figure.
+ *   Everything on the screen is a quantity, so making them all large makes
+ *   none of them prominent — the hierarchy has to come from position.
+ * * **Quiet labels.** `text-xs` in muted grey, sentence case. Not uppercase,
+ *   not letter-spaced. A label that has to be decoded is a label competing
+ *   with its own value.
+ * * **No colour in data.** Their charts are black on a dashed grey grid.
  *
- * Hierarchy comes from type scale and whitespace, not from boxes. Wrapping
- * every group in a border makes a dense screen unreadable — everything looks
- * equally important, so the reader must read all of it to find the one number
- * that matters. There are two containers and no more: `Panel` draws a hairline
- * because it holds a distinct object, `Region` draws nothing. Most are Regions.
- *
- * Numbers are large; prose is not. A control tower exists to show quantities,
- * and a headline that competes with the cash figure is in the wrong place.
+ * Colour is spent here on exactly one fact — money that arrived — so that fact
+ * stays remarkable. Nothing else on the screen is allowed to be green.
  */
 import type { ReactNode } from 'react'
 
 export const tone = {
-  page: '#ffffff',
-  surface: '#f7f5f1',   // warm paper, Midday's card tone
-  border: '#dcdad5',    // warm grey hairline
-  line: '#eeece7',      // lighter divider, for rows inside a surface
   ink: '#121212',
-  muted: '#616161',
-  faint: '#9d9a94',
-  ghost: '#c4c1ba',
-  cash: '#16794a',      // the only chromatic value, and only for money in hand
-  accent: '#ff4801',    // Guildless's mark. Two uses: progress, active nav.
+  muted: '#878787',
+  faint: '#a8a8a8',
+  border: '#e6e6e6',
+  borderStrong: '#d0d0d0',
+  hover: '#f7f7f7',
+  track: '#f2f2f2',
+  cash: '#16794a',
+  warn: '#b45309',
 } as const
 
-/** Uppercase micro-label. Latin at every locale on purpose: it marks "this is
- *  a field name", and at 10px a mixed-script row loses the even rhythm that
- *  makes a label row scannable. */
+/** A quiet field name. Sentence case, muted, no tracking. */
 export function Label({ children, className = '' }: { children: ReactNode; className?: string }) {
-  return <p className={`text-[10px] font-medium uppercase tracking-[0.09em] text-[#9d9a94] ${className}`}>
-    {children}
-  </p>
+  return <span className={`text-xs text-[#878787] ${className}`}>{children}</span>
 }
 
-/** A quantity and what it is. The number carries the weight; the label whispers. */
-export function Figure({ label, value, note, tone: shade = 'plain', size = 'lg' }: {
+/**
+ * A bordered cell holding one quantity.
+ *
+ * Label at the top, value at the bottom, detail inline beside the value —
+ * Midday's arrangement, and it works because the labels align across the row
+ * regardless of how long each one is, so the eye can run along the values.
+ */
+export function Cell({ label, value, detail, tone: shade = 'plain', href }: {
   label: string
   value: string
-  note?: string
+  detail?: string
   tone?: 'plain' | 'cash' | 'muted'
-  size?: 'lg' | 'md' | 'sm'
+  href?: () => void
 }) {
-  const colour = shade === 'cash' ? 'text-[#16794a]' : shade === 'muted' ? 'text-[#9d9a94]' : 'text-[#121212]'
-  const type = size === 'lg' ? 'text-[30px] leading-9' : size === 'md' ? 'text-xl leading-7' : 'text-base leading-6'
-  return <div className='min-w-0'>
+  const colour = shade === 'cash' ? 'text-[#16794a]' : shade === 'muted' ? 'text-[#878787]' : ''
+  const body = <>
     <Label>{label}</Label>
-    <p className={`mt-1.5 font-semibold tabular-nums tracking-[-0.02em] ${type} ${colour}`}>{value}</p>
-    {note ? <p className='mt-1 truncate text-[11px] text-[#9d9a94]'>{note}</p> : null}
-  </div>
+    <div className='mt-3 flex items-baseline gap-2'>
+      <span className={`text-xl font-medium tabular-nums ${colour}`}>{value}</span>
+      {detail ? <span className='truncate text-xs text-[#878787]'>{detail}</span> : null}
+    </div>
+  </>
+  const shell = 'flex min-h-[110px] flex-col justify-between border border-[#e6e6e6] bg-white p-5 text-left'
+  return href
+    ? <button onClick={href} className={`${shell} transition-colors hover:border-[#d0d0d0] hover:bg-[#f7f7f7]`}>{body}</button>
+    : <div className={shell}>{body}</div>
 }
 
-/** A bordered surface, for a thing that is genuinely a separate object. */
+/** A square bordered surface for anything that is not a single quantity. */
 export function Panel({ children, className = '' }: { children: ReactNode; className?: string }) {
-  return <section className={`rounded-lg border border-[#dcdad5] bg-[#f7f5f1] ${className}`}>
-    {children}
-  </section>
+  return <section className={`border border-[#e6e6e6] bg-white ${className}`}>{children}</section>
 }
 
-/** An unbordered group, separated by space alone — which is enough, and which
- *  keeps the page from becoming a grid of boxes. */
+/** A titled group with no border of its own. */
 export function Region({ label, children, right, className = '' }: {
   label?: string
   children: ReactNode
@@ -87,38 +92,36 @@ export function Region({ label, children, right, className = '' }: {
   </section>
 }
 
+// Midday's chip: 10px, 22px tall, bordered, and the one place a small radius
+// is allowed.
+const CHIP = 'inline-flex h-[22px] shrink-0 items-center rounded-md border px-2 text-[10px] font-medium'
+
 const STATUS_STYLE: Record<string, string> = {
-  // Money in hand is the one status that gets colour.
   PAYING: 'border-[#16794a]/30 bg-[#16794a]/[0.06] text-[#16794a]',
-  SCALE: 'border-[#121212]/20 bg-[#121212]/[0.04] text-[#121212]',
-  TEST: 'border-[#dcdad5] bg-white text-[#616161]',
-  WATCH: 'border-[#e6e3dd] bg-transparent text-[#9d9a94]',
-  // Drained and struck through rather than red: a dead bet should recede.
-  KILLED: 'border-transparent bg-transparent text-[#c4c1ba] line-through',
+  SCALE: 'border-[#d0d0d0] bg-white text-[#121212]',
+  TEST: 'border-[#e6e6e6] bg-white text-[#878787]',
+  WATCH: 'border-[#e6e6e6] bg-white text-[#a8a8a8]',
+  // Drained rather than red. A dead bet should recede, not shout.
+  KILLED: 'border-transparent bg-transparent text-[#c4c4c4] line-through',
 }
 
 export function Status({ value }: { value: string }) {
-  return <span className={`shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-semibold tracking-wide ${
-    STATUS_STYLE[value] ?? STATUS_STYLE.WATCH
-  }`}>{value}</span>
+  return <span className={`${CHIP} ${STATUS_STYLE[value] ?? STATUS_STYLE.WATCH}`}>{value}</span>
 }
 
 /** Progress toward the one number that settles the run. */
 export function Bar({ percent }: { percent: number }) {
   const clamped = Math.max(0, Math.min(100, percent))
-  return <div className='h-1 w-full overflow-hidden rounded-full bg-[#eeece7]'>
-    <div className='h-full rounded-full transition-[width] duration-500'
-      style={{ width: `${clamped}%`, background: tone.accent }} />
+  return <div className='h-1.5 w-full bg-[#f2f2f2]'>
+    <div className='h-full bg-[#121212] transition-[width] duration-500' style={{ width: `${clamped}%` }} />
   </div>
 }
 
 export const yen = (value: number) => {
   const rounded = Math.round(value || 0)
-  const sign = rounded < 0 ? '-' : ''
-  return `${sign}¥${Math.abs(rounded).toLocaleString('ja-JP')}`
+  return `${rounded < 0 ? '-' : ''}¥${Math.abs(rounded).toLocaleString('ja-JP')}`
 }
 
-/** Compact yen for tight columns: ¥1.2m, ¥740k. */
 export const yenShort = (value: number) => {
   const n = Math.round(value || 0)
   const abs = Math.abs(n)

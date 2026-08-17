@@ -76,12 +76,12 @@ export function App() {
     return <div className='grid h-svh place-items-center bg-white text-[#121212]'>
       {unreachable
         ? <p className='text-sm text-[#c23a08]'>Guildlessに接続できません。</p>
-        : <LoaderCircle className='size-5 animate-spin text-[#9d9a94]' />}
+        : <LoaderCircle className='size-5 animate-spin text-[#878787]' />}
     </div>
   }
 
   return <div className='flex h-svh w-full overflow-hidden bg-white text-[#121212]'>
-    <aside className='flex w-[188px] shrink-0 flex-col border-r border-[#dcdad5] bg-white'>
+    <aside className='flex w-[188px] shrink-0 flex-col border-r border-[#e6e6e6] bg-white'>
       <div className='flex h-12 shrink-0 items-center px-4'>
         <span className='text-[13px] font-semibold tracking-tight'>GUILDLESS</span>
       </div>
@@ -91,21 +91,21 @@ export function App() {
             key={id} onClick={() => show(id)}
             className={`flex items-center gap-2.5 rounded-md px-2.5 py-[7px] text-[13px] ${
               section === id
-                ? 'bg-[#f7f5f1] font-medium text-[#121212]'
-                : 'text-[#616161] hover:bg-[#f7f5f1]'
+                ? 'bg-[#f7f7f7] font-medium text-[#121212]'
+                : 'text-[#878787] hover:bg-[#f7f7f7]'
             }`}
           >
             <Icon className='size-[15px]' strokeWidth={1.75} />{label}
           </button>
         ))}
       </nav>
-      <div className='mt-auto border-t border-[#eeece7] p-2'>
+      <div className='mt-auto border-t border-[#e6e6e6] p-2'>
         <button
           onClick={() => show('settings')}
           className={`flex w-full items-center gap-2.5 rounded-md px-2.5 py-[7px] text-[13px] ${
             section === 'settings'
-              ? 'bg-[#f7f5f1] font-medium text-[#121212]'
-              : 'text-[#616161] hover:bg-[#f7f5f1]'
+              ? 'bg-[#f7f7f7] font-medium text-[#121212]'
+              : 'text-[#878787] hover:bg-[#f7f7f7]'
           }`}
         >
           <SettingsIcon className='size-[15px]' strokeWidth={1.75} />Settings
@@ -114,9 +114,9 @@ export function App() {
     </aside>
 
     <div className='flex min-w-0 flex-1 flex-col'>
-      <header className='flex h-12 shrink-0 items-center gap-3 border-b border-[#dcdad5] bg-white px-5'>
+      <header className='flex h-12 shrink-0 items-center gap-3 border-b border-[#e6e6e6] bg-white px-5'>
         {data.company ? (
-          <span className='text-[13px] text-[#616161]'>
+          <span className='text-[13px] text-[#878787]'>
             Company <span className='ml-1 font-medium text-[#121212]'>{data.company}</span>
           </span>
         ) : null}
@@ -125,14 +125,14 @@ export function App() {
             say Operating while nothing is executing. */}
         <span className='flex items-center gap-1.5 text-[12px]'>
           <span className={`size-[6px] rounded-full ${data.operating ? 'bg-[#16794a]' : 'bg-[#c0bcb4]'}`} />
-          <span className={data.operating ? 'text-[#16794a]' : 'text-[#9d9a94]'}>
+          <span className={data.operating ? 'text-[#16794a]' : 'text-[#878787]'}>
             {data.operating ? 'Operating' : 'Stopped'}
           </span>
         </span>
 
         <button
           onClick={() => setCommandOpen(true)}
-          className='ml-auto flex items-center gap-1.5 rounded-md border border-[#dcdad5] px-2 py-1 text-[11px] text-[#9d9a94] hover:bg-[#f7f5f1]'
+          className='ml-auto flex items-center gap-1.5 rounded-md border border-[#e6e6e6] px-2 py-1 text-[11px] text-[#878787] hover:bg-[#f7f7f7]'
         >
           <Command className='size-3' />K
         </button>

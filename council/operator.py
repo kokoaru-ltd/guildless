@@ -60,6 +60,34 @@ class Ledger:
     simulated_sales: int = 0
     spent_yen: int = 0
 
+    #: One row per pass, so the screen can draw the shape of the week rather
+    #: than only today's totals. A number without its trajectory cannot answer
+    #: the question an owner actually has, which is whether this is working.
+    history: list[dict[str, int]] = field(default_factory=list)
+
+    def snapshot(self) -> None:
+        """Append the current totals, if they differ from the last row.
+
+        Identical rows are dropped: a company that did nothing for an hour
+        should read as a flat line of a few points, not three hundred, and a
+        chart padded with repeats hides the moment something changed.
+        """
+        row = {
+            "inspected": self.inspected,
+            "eligible": len(self.eligible),
+            "contacted": len(self.contacted),
+            "replied": len(self.replied),
+            "quoted": len(self.quoted),
+            "cash": self.cash_yen,
+        }
+        if self.history and self.history[-1] == row:
+            return
+        self.history.append(row)
+        # Bounded: the screen plots a shape, and a shape needs a few hundred
+        # points at most. Unbounded growth here would be a slow leak.
+        if len(self.history) > 240:
+            del self.history[: len(self.history) - 240]
+
     def as_dict(self) -> dict[str, object]:
         return {
             "prospects_inspected": self.inspected,
@@ -73,6 +101,7 @@ class Ledger:
             "simulated_cash_yen": self.simulated_cash_yen,
             "simulated_sales": self.simulated_sales,
             "spent_yen": self.spent_yen,
+            "history": list(self.history),
         }
 
 
@@ -176,9 +205,11 @@ class Operator:
 
     def bank(self) -> str:
         receipts = self.world.collect_receipts()
-        if not receipts:
-            return ""
-        return _record(self.ledger, receipts)
+        line = _record(self.ledger, receipts) if receipts else ""
+        # Taken here because banking is the last step of a pass, so the row
+        # reflects a whole pass rather than a half-finished one.
+        self.ledger.snapshot()
+        return line
 
     def steps(self) -> list[tuple[str, Callable[[], str]]]:
         """The pass, in order. Named for what they do to the business."""

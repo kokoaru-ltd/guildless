@@ -55,7 +55,7 @@ export function CommandBar({ onClose, onRan }: { onClose: () => void; onRan: () 
       onClick={onClose}
       className='fixed inset-0 z-40 cursor-default bg-[#121212]/20'
     />
-    <div className='fixed left-1/2 top-[18vh] z-50 w-[min(560px,90vw)] -translate-x-1/2 overflow-hidden rounded-xl border border-[#dcdad5] bg-white shadow-[0_16px_48px_-12px_rgba(0,0,0,0.18)]'>
+    <div className='fixed left-1/2 top-[18vh] z-50 w-[min(560px,90vw)] -translate-x-1/2 overflow-hidden rounded-xl border border-[#e6e6e6] bg-white shadow-[0_16px_48px_-12px_rgba(0,0,0,0.18)]'>
       <div className='flex items-center gap-3 px-4'>
         <input
           ref={field}
@@ -65,26 +65,26 @@ export function CommandBar({ onClose, onRan }: { onClose: () => void; onRan: () 
             if (event.key === 'Enter') { event.preventDefault(); void run(text) }
           }}
           placeholder='会社について聞く'
-          className='h-12 min-w-0 flex-1 bg-transparent text-[15px] outline-none placeholder:text-[#c4c1ba]'
+          className='h-12 min-w-0 flex-1 bg-transparent text-[15px] outline-none placeholder:text-[#c4c4c4]'
         />
         {busy
-          ? <LoaderCircle className='size-4 shrink-0 animate-spin text-[#9d9a94]' />
-          : <CornerDownLeft className='size-3.5 shrink-0 text-[#c4c1ba]' />}
+          ? <LoaderCircle className='size-4 shrink-0 animate-spin text-[#878787]' />
+          : <CornerDownLeft className='size-3.5 shrink-0 text-[#c4c4c4]' />}
       </div>
 
       {reply ? (
-        <div className='border-t border-[#eeece7] bg-[#f7f5f1] px-4 py-3'>
+        <div className='border-t border-[#e6e6e6] bg-[#f7f7f7] px-4 py-3'>
           <p className={`text-[13px] leading-6 ${reply.refused ? 'text-[#c23a08]' : 'text-[#121212]'}`}>
             {reply.text}
           </p>
         </div>
       ) : (
-        <div className='border-t border-[#eeece7] py-1.5'>
+        <div className='border-t border-[#e6e6e6] py-1.5'>
           {SUGGESTIONS.map(item => (
             <button
               key={item}
               onClick={() => { setText(item); void run(item) }}
-              className='block w-full px-4 py-1.5 text-left text-[13px] text-[#616161] hover:bg-[#f7f5f1]'
+              className='block w-full px-4 py-1.5 text-left text-[13px] text-[#878787] hover:bg-[#f7f7f7]'
             >{item}</button>
           ))}
         </div>

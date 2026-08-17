@@ -52,6 +52,7 @@ export type Company = {
   outcome: { statement: string; target_yen: number; progress: number }
   decision: string
   bets: { bets: Bet[]; funnel: Funnel; focus_id: string; decision: string; pipeline_yen: number }
+  history: { inspected: number; eligible: number; contacted: number; replied: number; quoted: number; cash: number }[]
   needs_you: { task: string; title: string; detail: string }[]
   activity: ActivityItem[]
 }

@@ -1210,6 +1210,10 @@ def create_app(
             },
             "decision": portfolio.decision(),
             "bets": portfolio.as_dict(),
+            # One row per pass. The screen draws a shape from it; a total on
+            # its own cannot tell a company three weeks from revenue from one
+            # that is not working.
+            "history": list(app.state.operator.ledger.history),
             "needs_you": snapshot.get("human_required") or [],
             "activity": snapshot.get("engine", {}).get("activity") or [],
         }
