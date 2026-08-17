@@ -46,6 +46,10 @@ type Outcome = {
   failures: Failure[]
   human_required: HumanTask[]
   gate: { level: string; real_payments: number }
+  engine?: {
+    state: string; alive: boolean; ticks: number; current_step: string; error: string
+    activity: { at: string; step: string; detail: string; external: boolean }[]
+  }
   external_action?: { granted: boolean; note: string }
   excluded_from_totals: { test_payments: number; note: string }
 }
@@ -184,6 +188,39 @@ export function OutcomeView() {
           </div>
         )) : <p className='text-sm text-[#817d76]'>{t.noEvidence}</p>}
       </Card>
+
+      <section className='rounded-xl border border-[#dedbd4] bg-white p-6 xl:col-span-2 2xl:col-span-3'>
+        <div className='flex items-center gap-2'>
+          <p className='text-xs font-medium text-[#817d76]'>{t.activity}</p>
+          {data.engine && (
+            <span className={`ml-auto flex items-center gap-1.5 text-[11px] ${
+              data.engine.alive ? 'text-[#276453]' : 'text-[#b3261e]'
+            }`}>
+              <span className={`size-1.5 rounded-full ${
+                data.engine.alive ? 'animate-pulse bg-[#276453]' : 'bg-[#b3261e]'
+              }`} />
+              {data.engine.alive ? t.engineAlive(data.engine.ticks) : t.engineDead}
+            </span>
+          )}
+        </div>
+        {data.engine?.activity?.length ? (
+          <ol className='mt-3 space-y-1.5'>
+            {data.engine.activity.map((item, index) => (
+              <li key={index} className='flex gap-3 text-xs leading-5'>
+                <span className='shrink-0 tabular-nums text-[#c4c0b8]'>
+                  {item.at.slice(11, 19)}
+                </span>
+                <span className={`shrink-0 font-medium ${
+                  item.external ? 'text-[#a94712]' : 'text-[#817d76]'
+                }`}>{item.step}</span>
+                <span className='min-w-0 text-[#4d4a45]'>{item.detail}</span>
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <p className='mt-3 text-sm text-[#817d76]'>{t.noActivity}</p>
+        )}
+      </section>
 
       {data.failures.length > 0 && (
         <section className='rounded-xl border border-[#dedbd4] bg-white p-6 xl:col-span-2 2xl:col-span-3'>

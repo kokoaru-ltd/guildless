@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import asynccontextmanager
 import hashlib
 import json
 import logging
@@ -21,6 +22,8 @@ from council.capital import CapitalAllocator
 from council.decision_ledger import DecisionLedger, Outcome
 from council import grant as grant_module
 from council import ignition
+from council.engine import Engine
+from council.engine_steps import build_steps
 from council import run_status
 from council import state_audit
 from council.gates import current_level, locked_capabilities
@@ -811,6 +814,20 @@ def create_app(
 
     resolved = settings or manager.settings
     app.state.settings = resolved
+    app.state.engine = Engine(
+        manager.output_root / "engine.json",
+        steps=build_steps(GUILDLESS_ROOT),
+    )
+
+    @asynccontextmanager
+    async def _lifespan(_app: FastAPI):
+        # The company runs because the runtime is up, not because someone
+        # remembered to press a button.
+        app.state.engine.start()
+        yield
+        app.state.engine.stop()
+
+    app.router.lifespan_context = _lifespan
     # Payments stay switched off entirely until a key exists, so an unconfigured
     # deployment cannot be tricked into banking anything.
     if resolved.payment.configured:
@@ -1022,6 +1039,20 @@ def create_app(
             ],
         }
 
+    @app.post("/v1/engine/start")
+    async def engine_start() -> dict[str, Any]:
+        started = app.state.engine.start()
+        return {"started": started, **app.state.engine.status()}
+
+    @app.post("/v1/engine/stop")
+    async def engine_stop() -> dict[str, Any]:
+        app.state.engine.stop()
+        return app.state.engine.status()
+
+    @app.get("/v1/engine")
+    async def engine_status() -> dict[str, Any]:
+        return {**app.state.engine.status(), "activity": app.state.engine.recent(30)}
+
     @app.get("/v1/outcome")
     async def outcome() -> dict[str, Any]:
         """Everything the main screen shows, computed from measured state only.
@@ -1058,7 +1089,13 @@ def create_app(
         if processor and decision.status == "HUMAN_REQUIRED":
             human_tasks.extend(processor.human_tasks())
 
+        # Execution status comes from the worker's heartbeat, never inferred.
+        # Describing a company as running while nothing is executing is the
+        # defect this replaced, and files on disk cannot tell the difference.
+        engine = app.state.engine.status()
         status = decision.status
+        if not engine["alive"] and status not in ("SUCCESS", "TERMINAL_FAILURE"):
+            status = "HUMAN_REQUIRED" if decision.human_required else "STOPPED"
         return {
             "verified_net_outcome_yen": revenue - spent,
             "goal": "火種 → 第三者からの実入金 ¥1以上",
@@ -1068,7 +1105,14 @@ def create_app(
             "spark": _current_spark(manager.output_root),
             "status": status,
             "bottleneck": state_audit.bottleneck(report),
-            "current_action": decision.current_action,
+            # What it is doing right now is the worker's current step when one
+            # exists. With nothing running there is no honest answer but "not
+            # running", so that is what it says.
+            "current_action": (
+                engine["current_step"] or decision.current_action
+                if engine["alive"] else "実行していません"
+            ),
+            "engine": {**engine, "activity": app.state.engine.recent(20)},
             "external_action": {
                 "granted": grant is not None,
                 "note": "送信が必要になった時点でのみ許可を求めます",
