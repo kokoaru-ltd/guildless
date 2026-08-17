@@ -33,9 +33,9 @@ let quitting = false
 function runtimePath() {
   const name = 'guildless-runtime.exe'
   const candidates = [
+    path.join(process.resourcesPath || '', 'guildless-runtime', name),
+    path.join(__dirname, 'dist', 'guildless-runtime', name),
     path.join(process.resourcesPath || '', name),
-    path.join(process.resourcesPath || '', 'runtime', name),
-    path.join(__dirname, 'dist', name),
   ]
   return candidates.find(candidate => fs.existsSync(candidate)) || candidates[0]
 }

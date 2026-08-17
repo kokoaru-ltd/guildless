@@ -14,7 +14,7 @@ module.exports = {
     executableName: 'Guildless',
     asar: true,
     // Shipped beside the app and resolved at run time from resourcesPath.
-    extraResource: [path.join(__dirname, 'dist', 'guildless-runtime.exe')],
+    extraResource: [path.join(__dirname, 'dist', 'guildless-runtime')],
     ignore: [
       /^\/build($|\/)/,
       /^\/dist($|\/)/,       // the raw binary is copied via extraResource
