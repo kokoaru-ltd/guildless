@@ -45,6 +45,9 @@ export type Company = {
     expected_yen: number
     opportunities: number
     capital_yen: number
+    simulated_yen: number
+    simulated_sales: number
+    world: string
   }
   outcome: { statement: string; target_yen: number; progress: number }
   decision: string

@@ -25,6 +25,17 @@ export function Overview({ data, onOpenBet }: {
   const waiting = data.needs_you
 
   return <div className='flex h-full min-h-0 flex-col gap-6 overflow-hidden p-7'>
+    {money.world !== 'real' && (
+      <div className='flex shrink-0 items-center gap-2 rounded-md border border-[#b45309]/30 bg-[#b45309]/[0.05] px-3 py-2'>
+        <span className='text-[10px] font-semibold uppercase tracking-[0.09em] text-[#b45309]'>
+          Simulated
+        </span>
+        <p className='text-[11px] text-[#8a5a1a]'>
+          模擬環境で動作中。ファネルは動きますが、
+          {yen(money.simulated_yen)}（{money.simulated_sales}件）は模擬売上で、Cashには入りません。
+        </p>
+      </div>
+    )}
     {/* Money first, and net first within it. A company that received ¥300,000
         and spent ¥400,000 has not made ¥300,000, so the headline is the net. */}
     <Region className='shrink-0 border-b border-[#eeece7] pb-6'>

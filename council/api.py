@@ -28,7 +28,7 @@ from council import environment
 from council import ignition
 from council import journey
 from council.engine import Engine
-from council.engine_steps import build_steps
+from council.engine_steps import build_operator, build_steps
 from council import run_status
 from council import state_audit
 from council.gates import current_level, locked_capabilities
@@ -822,9 +822,13 @@ def create_app(
 
     resolved = settings or manager.settings
     app.state.settings = resolved
+    # The loop and the screen share one operator. Two copies would drift, and
+    # a dashboard that disagrees with the work is worse than no dashboard.
+    app.state.operator = build_operator(GUILDLESS_ROOT)
     app.state.engine = Engine(
         manager.output_root / "engine.json",
-        steps=build_steps(GUILDLESS_ROOT),
+        steps=build_steps(GUILDLESS_ROOT, operator=app.state.operator),
+        interval_seconds=getattr(app.state.operator.world, "tick_seconds", 20.0),
     )
 
     @asynccontextmanager
@@ -1193,6 +1197,11 @@ def create_app(
                 "expected_yen": portfolio.pipeline_yen,
                 "opportunities": portfolio.funnel["quoted"],
                 "capital_yen": int(snapshot["money"]["available_yen"]),
+                # Shown as its own figure so a demo can never be mistaken for a
+                # business. Nothing adds this into cash.
+                "simulated_yen": int(app.state.operator.ledger.simulated_cash_yen),
+                "simulated_sales": int(app.state.operator.ledger.simulated_sales),
+                "world": getattr(app.state.operator.world, "name", "real"),
             },
             "outcome": {
                 "statement": snapshot.get("spark") or "",
@@ -1217,18 +1226,26 @@ def create_app(
         offer = (snapshot.get("strategy") or {}).get("offer")
         if not offer:
             return []
+        # Counted by the loop that did the work, not read back from a file it
+        # may not have written yet.
+        led = app.state.operator.ledger
         return [bets.Bet(
             id="primary",
             name=str(offer),
             offer=str(offer),
             price_yen=int((snapshot.get("strategy") or {}).get("price_yen") or 0),
             channel=str(report.get("channel") or ""),
-            contacted=int(report.get("contacts_made") or 0),
-            replied=int(report.get("replies_received") or 0),
-            meetings=int(report.get("meetings_booked") or 0),
-            quoted=int(report.get("quotes_sent") or 0),
+            contacted=len(led.contacted),
+            replied=len(led.replied),
+            meetings=len(led.interested),
+            quoted=len(led.quoted),
+            # Verified revenue only. The loop's simulated total is reported
+            # beside it, never inside it.
             cash_yen=int(snapshot["money"]["verified_revenue_yen"]),
             spent_yen=int(snapshot["money"]["spent_yen"]),
+            pipeline_yen=len(led.quoted) * int(
+                (snapshot.get("strategy") or {}).get("price_yen") or 0
+            ),
         )]
 
     @app.get("/v1/environment")
