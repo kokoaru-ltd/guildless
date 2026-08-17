@@ -190,7 +190,7 @@ class FormSubmissionExecutor:
 
         # A 200 is the site accepting bytes. Only a confirmation on the page
         # means the enquiry actually reached anyone.
-        confirmed = outcome.submitted and _confirmed(outcome.confirmation)
+        confirmed = outcome.submitted and _confirmed_marker(outcome.confirmation)
         if not confirmed:
             self.funnel.skip("unconfirmed")
             raise RuntimeError(f"送信確認が取れませんでした: {outcome.detail[:120]}")
@@ -204,7 +204,7 @@ class FormSubmissionExecutor:
         }
 
 
-def _confirmed(text: str) -> bool:
+def _confirmed_marker(text: str) -> bool:
     lowered = (text or "").lower()
     return any(marker.lower() in lowered for marker in CONFIRMATION_MARKERS)
 

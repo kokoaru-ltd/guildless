@@ -98,9 +98,10 @@ def test_a_confirmed_payment_reaches_the_wallet(payments, capital, adapter):
     result = payments.handle_webhook(body, headers)
 
     assert result.status == "paid"
-    assert payments.real_payment_count == 1
-    assert capital.state.revenue_yen == 30_000
-    assert capital.cash_yen == 35_000
+    # Sandbox events are test mode, so nothing is banked.
+    assert payments.test_payment_count == 1
+    assert payments.real_payment_count == 0
+    assert capital.state.revenue_yen == 0
 
 
 def test_a_retried_webhook_banks_the_sale_only_once(payments, capital, adapter):
@@ -108,8 +109,7 @@ def test_a_retried_webhook_banks_the_sale_only_once(payments, capital, adapter):
     body, headers = adapter.paid_event(checkout, event_id="evt_same")
     payments.handle_webhook(body, headers)
     payments.handle_webhook(body, headers)
-    assert capital.state.revenue_yen == 30_000
-    assert payments.real_payment_count == 1
+    assert len(payments.paid_checkouts) == 1
 
 
 def test_an_agent_cannot_declare_a_sale(payments):
@@ -127,9 +127,9 @@ def test_payments_survive_a_restart(tmp_path, capital, adapter):
     first.handle_webhook(body, headers)
 
     reopened = PaymentProcessor(path, adapter, capital)
-    assert reopened.real_payment_count == 1
+    assert len(reopened.paid_checkouts) == 1
     reopened.handle_webhook(body, headers)
-    assert capital.state.revenue_yen == 30_000
+    assert len(reopened.paid_checkouts) == 1
 
 
 def test_live_keys_surface_kyc_as_a_human_task(tmp_path, capital):
@@ -221,3 +221,30 @@ def test_a_clean_success_has_no_failure():
         contacted=20, replied=4, interested=2, payments=1, delivered=1,
         revenue_yen=30_000, direct_cost_yen=1_000, delivery_proof_passed=True,
     )) is None
+
+
+# --- test-mode payments must not fund the company or open gates ------------
+
+def test_a_test_mode_payment_never_reaches_the_wallet(payments, capital, adapter):
+    checkout = order(payments)
+    body, headers = adapter.paid_event(checkout, event_id="evt_test")
+    payments.handle_webhook(body, headers)
+
+    assert checkout.status == "paid"
+    assert payments.test_payment_count == 1
+    assert payments.real_payment_count == 0
+    assert payments.revenue_yen == 0
+    assert capital.state.revenue_yen == 0
+
+
+def test_a_live_payment_does(payments, capital, adapter):
+    checkout = order(payments)
+    body, headers = adapter.sign({
+        "id": "evt_live", "type": "checkout.session.completed", "livemode": True,
+        "data": {"object": {"id": checkout.checkout_id,
+                            "payment_status": "paid", "amount_total": 30_000}},
+    })
+    payments.handle_webhook(body, headers)
+
+    assert payments.real_payment_count == 1
+    assert capital.state.revenue_yen == 30_000

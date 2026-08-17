@@ -122,6 +122,11 @@ class RevenueClaim:
     delivered: bool = False
     direct_cost_yen: int = 0
     claimed_by: str = ""
+    #: False for sandbox and test-mode transactions. A provider-verified test
+    #: payment is a correct pipeline and an empty bank account, and counting it
+    #: is the most convincing false success available -- every signature, every
+    #: webhook and every ledger entry is genuine, and no money moved.
+    live: bool = False
     at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
 
 
@@ -157,6 +162,13 @@ def judge(contract: IgnitionContract, claim: RevenueClaim | None) -> Judgement:
             "progress",
             f"{claim.evidence_kind or '無根拠'}は外部証拠として認められません。"
             f"認められるのは{sorted(ACCEPTED_EVIDENCE)}のみです。",
+        )
+
+    if not claim.live:
+        return Judgement(
+            "progress",
+            f"テストモードの決済（{claim.evidence_reference or claim.evidence_kind}）です。"
+            "配線は正しく動いていますが、実際の金は動いていません。",
         )
 
     if claim.amount_yen < contract.minimum_revenue_yen:

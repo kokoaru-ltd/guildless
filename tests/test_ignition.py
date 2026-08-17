@@ -28,6 +28,7 @@ def claim(**overrides):
     base = dict(
         amount_yen=500, evidence_kind="stripe_webhook_verified",
         evidence_reference="evt_1", delivered=True, direct_cost_yen=120,
+        live=True,
     )
     base.update(overrides)
     return RevenueClaim(**base)
@@ -165,3 +166,20 @@ def test_self_modification_cannot_edit_the_sender_identity():
         targets=("council/sender_identity.py",),
     )
     assert SelfModificationPolicy().evaluate(request).allowed is False
+
+
+# --- test-mode money is a working pipeline, not a business ------------------
+
+def test_a_test_mode_payment_is_not_success():
+    """Every signature genuine, every webhook real, no money moved."""
+    verdict = judge(contract(), claim(live=False))
+    assert verdict.outcome == "progress"
+    assert "テストモード" in verdict.reason
+
+
+def test_the_same_payment_in_live_mode_is_success():
+    assert judge(contract(), claim(live=True)).outcome == "business_success"
+
+
+def test_test_mode_is_the_default_so_it_must_be_asserted():
+    assert RevenueClaim(amount_yen=1, evidence_kind="stripe_webhook_verified").live is False

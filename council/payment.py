@@ -72,6 +72,10 @@ class Checkout:
     paid_at: str | None = None
     #: What the provider kept. Revenue net of this is what the company earned.
     fee_yen: int = 0
+    #: Whether real money moved. Test-mode payments are fully genuine events
+    #: with real signatures and no funds behind them, so they are tracked
+    #: separately rather than counted.
+    live: bool = False
 
 
 @dataclass
@@ -83,6 +87,7 @@ class PaymentEvent:
     status: PaymentStatus
     amount_yen: int
     fee_yen: int = 0
+    live: bool = False
     raw: dict[str, Any] = field(default_factory=dict)
 
 
@@ -198,6 +203,8 @@ class StripeAdapter:
             checkout_id=obj.get("id", ""),
             status=status,
             amount_yen=int(obj.get("amount_total") or 0),
+            # Stripe states this on the event itself. Absent means test.
+            live=bool(event.get("livemode")),
             raw=event,
         )
 
@@ -239,7 +246,11 @@ class PaymentProcessor:
             checkout.status = "paid"
             checkout.paid_at = datetime.now(UTC).isoformat()
             checkout.fee_yen = event.fee_yen
-            self.capital.record_revenue(checkout.amount_yen - event.fee_yen)
+            checkout.live = event.live
+            # Test-mode money never reaches the wallet. Banking it would let a
+            # correct integration look like a funded company.
+            if event.live:
+                self.capital.record_revenue(checkout.amount_yen - event.fee_yen)
         elif event.status == "refunded" and checkout.status == "paid":
             checkout.status = "refunded"
         elif event.status == "failed":
@@ -254,16 +265,30 @@ class PaymentProcessor:
 
     @property
     def paid_checkouts(self) -> list[Checkout]:
+        """Every confirmed payment, test ones included."""
         return [c for c in self.checkouts.values() if c.status == "paid"]
 
     @property
+    def live_paid_checkouts(self) -> list[Checkout]:
+        return [c for c in self.paid_checkouts if c.live]
+
+    @property
     def real_payment_count(self) -> int:
-        """Third parties who actually paid. This number drives the gates."""
-        return len(self.paid_checkouts)
+        """Third parties whose money actually moved. This drives the gates.
+
+        Test payments are excluded deliberately. A verified sandbox transaction
+        proves the plumbing and nothing about the market, and letting it unlock
+        capability would reward building the pipe rather than selling anything.
+        """
+        return len(self.live_paid_checkouts)
+
+    @property
+    def test_payment_count(self) -> int:
+        return len(self.paid_checkouts) - len(self.live_paid_checkouts)
 
     @property
     def revenue_yen(self) -> int:
-        return sum(c.amount_yen - c.fee_yen for c in self.paid_checkouts)
+        return sum(c.amount_yen - c.fee_yen for c in self.live_paid_checkouts)
 
     def human_tasks(self) -> list[dict[str, str]]:
         """Work only a named person may legally do, surfaced rather than skipped."""
@@ -371,5 +396,8 @@ class SandboxAdapter:
             checkout_id=obj.get("id", ""),
             status=status,
             amount_yen=int(obj.get("amount_total") or 0),
+            # Sandbox events are test mode unless a test says otherwise, which
+            # keeps the default honest.
+            live=bool(event.get("livemode")),
             raw=event,
         )
