@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -11,7 +12,24 @@ FORBIDDEN_ROOTS = (
     Path(r"D:\guildless_sim"),
     Path(r"D:\founder_memory"),
 )
-COUNCIL_ROOT = Path(__file__).resolve().parent.parent
+def _council_root() -> Path:
+    """The directory all writes must stay inside.
+
+    In a frozen build the module lives in a temporary extraction directory that
+    is deleted on exit, so deriving the boundary from the module location would
+    confine the ledger to somewhere that does not survive the process. The
+    packaged runtime therefore sets GUILDLESS_HOME, and the boundary follows it.
+    """
+    override = os.getenv("GUILDLESS_HOME")
+    if override:
+        return Path(override).resolve()
+    if getattr(sys, "frozen", False):
+        base = os.getenv("LOCALAPPDATA") or str(Path.home())
+        return (Path(base) / "Guildless").resolve()
+    return Path(__file__).resolve().parent.parent
+
+
+COUNCIL_ROOT = _council_root()
 ALLOWED_EXTENSIONS = {".txt", ".md", ".json", ".yaml", ".yml", ".csv", ".tsv"}
 
 

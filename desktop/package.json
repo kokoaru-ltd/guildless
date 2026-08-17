@@ -1,0 +1,31 @@
+{
+  "name": "guildless",
+  "productName": "Guildless",
+  "version": "0.1.1",
+  "description": "Turns a spark and some capital into verified revenue",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron-forge start",
+    "package": "electron-forge package",
+    "make": "electron-forge make"
+  },
+  "devDependencies": {
+    "@electron-forge/cli": "^7.6.0",
+    "@electron-forge/maker-squirrel": "^7.6.0",
+    "@electron-forge/maker-zip": "^7.6.0",
+    "electron": "^33.2.0"
+  },
+  "config": {
+    "forge": "./forge.config.js"
+  },
+  "allowScripts": {
+    "electron@33.4.11": true,
+    "electron-winstaller@5.4.4": true
+  },
+  "author": {
+    "name": "Guildless",
+    "email": "noreply@guildless.local"
+  },
+  "license": "MIT"
+}

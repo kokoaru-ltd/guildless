@@ -472,3 +472,13 @@ class RevenueAnalyzeRequest(StrictModel):
 
 class RevenueScoutRequest(StrictModel):
     plan_id: str = Field(pattern=r"^[A-Za-z0-9_-]{1,80}$")
+
+
+class SparkRequest(StrictModel):
+    """The only required input: a thought, and optionally what is already owned."""
+
+    statement: str = Field(default="", max_length=2_000)
+    available_resources: list[str] = Field(default_factory=list, max_length=20)
+    capital_yen: int = Field(default=0, ge=0, le=100_000_000)
+    deadline_days: int = Field(default=7, ge=1, le=365)
+    max_loss_yen: int = Field(default=0, ge=0, le=100_000_000)

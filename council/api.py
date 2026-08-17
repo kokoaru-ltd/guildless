@@ -20,6 +20,7 @@ from council.config import Settings
 from council.capital import CapitalAllocator
 from council.decision_ledger import DecisionLedger, Outcome
 from council import grant as grant_module
+from council import ignition
 from council import run_status
 from council import state_audit
 from council.gates import current_level, locked_capabilities
@@ -47,6 +48,7 @@ from council.schemas import (
     CouncilRunAccepted,
     CouncilRunRequest,
     DecisionOutcomeRequest,
+    SparkRequest,
     GuildlessJobRequest,
     GuildlessRunRequest,
     RevenueAnalyzeRequest,
@@ -83,6 +85,20 @@ ALLOWED_AUDIO_TYPES = {
 
 
 GUILDLESS_ROOT = Path(__file__).resolve().parent.parent
+
+
+def _current_spark(output_root: Path) -> str:
+    path = output_root / "ignition.json"
+    if not path.exists():
+        return ""
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return ""
+    spark = data.get("spark") or {}
+    statement = str(spark.get("statement") or "").strip()
+    resources = spark.get("available_resources") or []
+    return statement or "、".join(str(r) for r in resources)
 
 
 def _rejected_offers() -> list[dict[str, Any]]:
@@ -1046,6 +1062,10 @@ def create_app(
         return {
             "verified_net_outcome_yen": revenue - spent,
             "goal": "火種 → 第三者からの実入金 ¥1以上",
+            # Absent until a spark is set, which is what the first-run screen
+            # keys on. A control centre for a company that does not exist yet
+            # should show how to start it and nothing else.
+            "spark": _current_spark(manager.output_root),
             "status": status,
             "bottleneck": state_audit.bottleneck(report),
             "current_action": decision.current_action,
@@ -1079,6 +1099,40 @@ def create_app(
                 "note": "テストモード決済は売上にもGATEにも算入していません",
             },
         }
+
+    @app.post("/v1/spark")
+    async def set_spark(request: SparkRequest) -> dict[str, Any]:
+        """Start a run from a thought.
+
+        Deliberately the only required input. Asking for a plan hands the hard
+        part -- who pays for this and how to reach them -- back to the person,
+        and that is the work.
+        """
+        spark = ignition.Spark(
+            statement=request.statement.strip(),
+            available_resources=tuple(request.available_resources),
+        )
+        if not spark.viable():
+            raise HTTPException(status_code=422, detail="火種が空です")
+
+        contract = ignition.IgnitionContract(
+            spark=spark,
+            capital_yen=request.capital_yen,
+            deadline_days=request.deadline_days,
+            max_loss_yen=request.max_loss_yen,
+        )
+        write_json(manager.output_root / "ignition.json", {
+            "spark": {
+                "statement": spark.statement,
+                "available_resources": list(spark.available_resources),
+            },
+            "capital_yen": contract.capital_yen,
+            "deadline_days": contract.deadline_days,
+            "max_loss_yen": contract.max_loss_yen,
+            "minimum_revenue_yen": contract.minimum_revenue_yen,
+            "started_at": datetime.now(UTC).isoformat(),
+        })
+        return {"accepted": True, "contract": contract.describe()}
 
     @app.get("/v1/gates")
     async def gate_status() -> dict[str, Any]:
