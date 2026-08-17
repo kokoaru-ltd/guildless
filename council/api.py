@@ -19,6 +19,8 @@ from council.autonomous import GuildlessAutonomousRunner
 from council.config import Settings
 from council.capital import CapitalAllocator
 from council.decision_ledger import DecisionLedger, Outcome
+from council import grant as grant_module
+from council import state_audit
 from council.gates import current_level, locked_capabilities
 from council.payment import (
     CheckoutRequest,
@@ -77,6 +79,102 @@ ALLOWED_AUDIO_TYPES = {
     "audio/webm", "audio/ogg", "audio/wav", "audio/x-wav", "audio/mpeg",
     "audio/mp4", "video/webm", "application/octet-stream",
 }
+
+
+GUILDLESS_ROOT = Path(__file__).resolve().parent.parent
+
+
+def _run_status(report: Any, human_tasks: list[dict], real_payments: int) -> str:
+    """One word for where the whole thing stands.
+
+    HUMAN_REQUIRED outranks RUNNING because a run that is waiting on a person
+    is not running, and showing it as running is how a company sits blocked
+    for a week while the screen looks healthy.
+    """
+    if real_payments > 0:
+        return "SUCCESS"
+    if human_tasks:
+        return "HUMAN_REQUIRED"
+    if report.get("prospects_eligible", 0) == 0 and report.get("prospects_inspected", 0) > 0:
+        return "BLOCKED"
+    return "RUNNING"
+
+
+def _current_action(report: Any, status: str) -> str:
+    if status == "HUMAN_REQUIRED":
+        return "あなたの操作を待っています。それまで外部へは何もしません。"
+    if status == "BLOCKED":
+        return "接触できる相手が見つからないため、別の顧客層とチャネルを探しています。"
+    stage = report.get("loop_stage")
+    labels = {
+        "offer_selection": "売る商品を選んでいます",
+        "delivery_proof": "売る前に、作れることを確かめています",
+        "customer_search": "条件に合う見込み客を探しています",
+        "outreach": "見込み客へ連絡しています",
+        "payment": "入金を待っています",
+        "delivery": "納品しています",
+        "profit": "収支を確認しています",
+        "killed": "この商品での挑戦は停止しました",
+    }
+    return labels.get(stage or "", "待機中です")
+
+
+def _rejected_offers() -> list[dict[str, Any]]:
+    path = GUILDLESS_ROOT / "runs" / "revenue_loop.json"
+    if not path.exists():
+        return []
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return []
+    return [
+        {"name": (row.get("offer") or {}).get("name", ""), "reasons": row.get("reasons", [])}
+        for row in (data.get("rejected_offers") or [])
+    ][:5]
+
+
+def _external_evidence(processor: Any, report: Any) -> list[dict[str, Any]]:
+    """Only things a third party did. Nothing Guildless said about itself."""
+    evidence: list[dict[str, Any]] = []
+    if processor is not None:
+        for checkout in processor.checkouts.values():
+            if checkout.status not in ("paid", "refunded", "unknown_reconciling"):
+                continue
+            evidence.append({
+                "kind": "payment",
+                "source": checkout.provider or "stripe",
+                "detail": f"¥{checkout.amount_yen:,} {checkout.status}",
+                "at": checkout.paid_at or "",
+                "counts_as_revenue": bool(checkout.live and checkout.status == "paid"),
+                "note": "" if checkout.live else "テストモードのため売上には算入していません",
+            })
+    submissions = int(report.get("external_submissions") or 0)
+    if submissions:
+        evidence.append({
+            "kind": "submission", "source": "contact_form",
+            "detail": f"受付確認が取れた送信 {submissions}件",
+            "counts_as_revenue": False, "note": "",
+        })
+    return evidence
+
+
+def _failures(report: Any) -> list[dict[str, str]]:
+    rows: list[dict[str, str]] = []
+    exclusions = report.get("prospect_exclusions") or {}
+    if exclusions:
+        detail = "、".join(f"{k} {v}社" for k, v in sorted(exclusions.items(), key=lambda kv: -kv[1]))
+        rows.append({
+            "what": f"見込み客{report.get('prospects_inspected', 0)}社を検査し、全て除外",
+            "detail": detail,
+            "learning": "問い合わせフォームは規約・用途制限・CAPTCHAで大半が使えない。別チャネルか別顧客層が要る。",
+        })
+    if report.get("last_failure"):
+        rows.append({
+            "what": str(report.get("last_failure")),
+            "detail": "",
+            "learning": "同分類の失敗は次の戦略選択で回避します。",
+        })
+    return rows
 
 
 def _int_env(name: str, default: int) -> int:
@@ -940,6 +1038,69 @@ def create_app(
                 }
                 for c in processor.checkouts.values()
             ],
+        }
+
+    @app.get("/v1/outcome")
+    async def outcome() -> dict[str, Any]:
+        """Everything the main screen shows, computed from measured state only.
+
+        One endpoint on purpose. A screen assembled from several sources can
+        show a gate from one moment beside revenue from another, and the reader
+        has no way to tell. Here the whole view is one consistent read.
+        """
+        report = state_audit.audit(GUILDLESS_ROOT)
+        facts = report.as_dict()["facts"]
+        processor = app.state.payments
+
+        real_payments = processor.real_payment_count if processor else 0
+        revenue = processor.revenue_yen if processor else 0
+        spent = int(report.get("spent_yen") or 0)
+        breakdown = report.get("capital_breakdown_yen") or {}
+        grant = grant_module.load(manager.output_root)
+
+        human_tasks = list(processor.human_tasks()) if processor else []
+        if grant is None:
+            human_tasks.append({
+                "task": "external_action_grant",
+                "title": "外部への接触を許可してください",
+                "detail": (
+                    "見込み客への連絡を開始するには、範囲を決めた許可が必要です。"
+                    "Guildless自身がこの許可を作ることはできません。"
+                ),
+            })
+
+        status = _run_status(report, human_tasks, real_payments)
+        return {
+            "verified_net_outcome_yen": revenue - spent,
+            "goal": "火種 → 第三者からの実入金 ¥1以上",
+            "status": status,
+            "bottleneck": state_audit.bottleneck(report),
+            "current_action": _current_action(report, status),
+            "money": {
+                "starting_capital_yen": int(report.get("initial_capital_yen") or 0),
+                "available_yen": int(breakdown.get("experiment", 0)) + int(breakdown.get("ai_api", 0)),
+                "reserved_yen": int(breakdown.get("reserve", 0)),
+                "spent_yen": spent,
+                "verified_revenue_yen": revenue,
+                "breakdown_yen": breakdown,
+            },
+            "strategy": {
+                "offer": report.get("offer_name"),
+                "price_yen": report.get("offer_price_yen"),
+                "chosen_because": "条件（単価・原価・納品時間・法的リスク・到達可能性）を通過した中で初期原価が最小",
+                "rejected": _rejected_offers(),
+            },
+            "evidence": _external_evidence(processor, report),
+            "failures": _failures(report),
+            "human_required": human_tasks,
+            "gate": {
+                "level": current_level(real_payments=real_payments).level,
+                "real_payments": real_payments,
+            },
+            "excluded_from_totals": {
+                "test_payments": int(facts.get("test_payments", {}).get("value") or 0),
+                "note": "テストモード決済は売上にもGATEにも算入していません",
+            },
         }
 
     @app.get("/v1/gates")
